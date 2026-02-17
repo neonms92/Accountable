@@ -1091,14 +1091,14 @@
             </div>
             <div class="modal-body">
                 <div class="drive-setup-note" id="driveSetupNote" style="display:none;">
-                    To use Google Drive, open this file from a local web server and set your OAuth Client ID below, or set <code>GOOGLE_CLIENT_ID</code> at the top of the script.
+                    ⚠️ <strong>Google OAuth requires an HTTP server</strong> — it does not work over <code>file://</code>.
                     <br><br>
-                    <div class="form-group" style="margin-bottom:0;">
-                        <label for="clientIdInput">OAuth Client ID</label>
-                        <input type="text" id="clientIdInput" placeholder="xxxx.apps.googleusercontent.com">
-                    </div>
-                    <br>
-                    <button onclick="applyClientId()">Connect</button>
+                    Serve this file locally:<br>
+                    <code>python3 -m http.server 8080</code><br>
+                    then open <code>http://localhost:8080</code>
+                    <br><br>
+                    Also add <code>http://localhost:8080</code> to your OAuth client's
+                    <strong>Authorized JavaScript origins</strong> in Google Cloud Console.
                 </div>
                 <div id="driveOpenContent">
                     <p style="color: var(--color-ink-muted); margin-bottom: 1rem; font-size: 0.875rem;">Files in <strong>/Accountable</strong> on Google Drive:</p>
@@ -1147,6 +1147,8 @@
         // ─── Google Drive Configuration ─────────────────────────────────────────────
         // Set your OAuth 2.0 Client ID here (Web application type, from Google Cloud Console).
         // Authorized JavaScript origins must include the origin you serve this file from.
+        // IMPORTANT: Google OAuth does NOT work from file:// — serve this file via HTTP.
+        //   Quickest way:  python3 -m http.server 8080  then open http://localhost:8080
         const GOOGLE_CLIENT_ID = '1019024216922-inp3es25qekbc4b8nkn8s2q9qeleeu4o.apps.googleusercontent.com';
 
         const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -1157,119 +1159,158 @@
         let gAccessToken = null;
         let gTokenClient = null;
         let gDriveFolderId = null;
-        let resolvedClientId = GOOGLE_CLIENT_ID;
+        let gDriveReady = false;           // GIS library loaded + token client created
+        let gPendingAction = null;         // function to run after auth succeeds
 
-        // ─── Drive Init ─────────────────────────────────────────────────────────────
+        // ─── Drive bootstrap ─────────────────────────────────────────────────────────
+        // Called from init() — waits for the GIS <script> to be ready, then wires up
+        // the token client.  Does NOT attempt a silent token request (GIS popup-blocker
+        // workaround: only call requestAccessToken inside a user-gesture handler).
 
         function driveInit() {
-            const stored = localStorage.getItem('gClientId');
-            if (stored) resolvedClientId = stored;
-
-            if (!resolvedClientId) {
+            const origin = window.location.protocol;
+            if (origin === 'file:') {
+                updateDriveStatus(false, 'Needs HTTP server');
+                console.warn('[Drive] Google OAuth does not work over file://. Serve with: python3 -m http.server 8080');
+                return;
+            }
+            if (!GOOGLE_CLIENT_ID) {
                 updateDriveStatus(false, 'No Client ID');
                 return;
             }
+            waitForGIS(driveCreateTokenClient);
+        }
 
-            // Wait for GIS to load
-            if (typeof google === 'undefined' || !google.accounts) {
-                window.addEventListener('load', driveInitClient);
+        function waitForGIS(cb, attempts = 0) {
+            if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+                cb();
+            } else if (attempts < 40) {           // wait up to 4 s
+                setTimeout(() => waitForGIS(cb, attempts + 1), 100);
             } else {
-                driveInitClient();
+                updateDriveStatus(false, 'GIS failed to load');
+                console.error('[Drive] google.accounts.oauth2 never became available.');
             }
         }
 
-        function driveInitClient() {
+        function driveCreateTokenClient() {
             try {
                 gTokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: resolvedClientId,
+                    client_id: GOOGLE_CLIENT_ID,
                     scope: DRIVE_SCOPE,
-                    callback: onTokenResponseWithCallback,
+                    callback: handleTokenResponse,
+                    error_callback: (err) => {
+                        console.error('[Drive] token error', err);
+                        updateDriveStatus(false, 'Auth error');
+                        showMessage('Google Drive auth error: ' + (err.message || err.type), 'error');
+                        if (gPendingAction) { gPendingAction = null; }
+                    }
                 });
-                updateDriveStatus(null, 'Drive');
-                driveAutoLoad();
+                gDriveReady = true;
+                updateDriveStatus(false, 'Drive');          // ready but not yet authed
+                console.log('[Drive] token client created, ready.');
+                driveAutoLoad();                            // attempt silent load
             } catch (e) {
-                updateDriveStatus(false, 'Drive Error');
+                updateDriveStatus(false, 'Init failed');
+                console.error('[Drive] initTokenClient threw:', e);
             }
         }
 
-        function applyClientId() {
-            const val = document.getElementById('clientIdInput').value.trim();
-            if (!val) return showMessage('Please enter a Client ID', 'error');
-            resolvedClientId = val;
-            localStorage.setItem('gClientId', val);
-            document.getElementById('driveSetupNote').style.display = 'none';
-            driveInitClient();
-            showMessage('Client ID saved. Connecting…');
-        }
+        // ─── Token lifecycle ─────────────────────────────────────────────────────────
 
-        function onTokenResponse(resp) {
+        function handleTokenResponse(resp) {
+            console.log('[Drive] token response', resp);
             if (resp.error) {
-                updateDriveStatus(false, 'Auth Failed');
-                showMessage('Google Drive auth failed: ' + resp.error, 'error');
+                updateDriveStatus(false, 'Auth failed');
+                showMessage('Google Drive: ' + resp.error, 'error');
+                gPendingAction = null;
                 return;
             }
             gAccessToken = resp.access_token;
             updateDriveStatus(true, 'Connected');
-            showMessage('Google Drive connected');
-            ensureFolder().then(() => {
-                // Refresh list if open modal is showing
-                if (document.getElementById('driveOpenModal').classList.contains('active')) {
-                    loadDriveFileList();
-                }
-            });
+            console.log('[Drive] authenticated, token received.');
+
+            if (gPendingAction) {
+                const action = gPendingAction;
+                gPendingAction = null;
+                action();
+            }
         }
 
-        function requestDriveAccess(callback) {
-            if (!gTokenClient) {
-                if (!resolvedClientId) {
-                    document.getElementById('driveSetupNote').style.display = 'block';
-                    return;
-                }
-                driveInitClient();
-                setTimeout(() => requestDriveAccess(callback), 500);
+        // Call this inside every button click handler that needs Drive access.
+        // If already have a token, runs fn() immediately.
+        // Otherwise triggers the OAuth popup (must be called from a user gesture).
+        function withDriveAuth(fn) {
+            if (!gDriveReady) {
+                showMessage('Google Drive not ready yet — please wait a moment and try again.', 'error');
                 return;
             }
             if (gAccessToken) {
-                callback();
+                fn();
                 return;
             }
-            // Store callback to run after auth
-            window._drivePostAuthCallback = callback;
-            gTokenClient.requestAccessToken({ prompt: '' });
+            gPendingAction = fn;
+            console.log('[Drive] requesting access token (popup)…');
+            gTokenClient.requestAccessToken({ prompt: 'consent' });
         }
 
-        function onTokenResponseWithCallback(resp) {
-            onTokenResponse(resp);
-            if (!resp.error && window._drivePostAuthCallback) {
-                const cb = window._drivePostAuthCallback;
-                window._drivePostAuthCallback = null;
-                setTimeout(cb, 300);
-            }
+        // ─── Silent auto-load on page start ─────────────────────────────────────────
+        // GIS supports { prompt: 'none' } only when the user has already consented.
+        // We use it once on startup; if it fails we just skip silently.
+
+        function driveAutoLoad() {
+            if (!gDriveReady) return;
+            console.log('[Drive] attempting silent token for auto-load…');
+            const silentClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                prompt: '',
+                callback: async (resp) => {
+                    if (resp.error) {
+                        console.log('[Drive] silent auth skipped:', resp.error);
+                        return;           // user hasn't consented yet — that's fine
+                    }
+                    gAccessToken = resp.access_token;
+                    updateDriveStatus(true, 'Connected');
+                    console.log('[Drive] silent auth OK — trying to auto-load data.json');
+                    try {
+                        await ensureFolder();
+                        const files = await listJsonFiles();
+                        const defaultFile = files.find(f => f.name === 'data.json');
+                        if (defaultFile) {
+                            const content = await downloadFile(defaultFile.id);
+                            loadLedgerFromString(content, 'data.json');
+                            showMessage('Auto-loaded data.json from Google Drive');
+                        }
+                    } catch (e) {
+                        console.warn('[Drive] auto-load failed:', e);
+                    }
+                }
+            });
+            silentClient.requestAccessToken({ prompt: '' });
         }
+
+        // ─── Drive status indicator ──────────────────────────────────────────────────
 
         function updateDriveStatus(connected, text) {
             const el = document.getElementById('driveStatus');
             const txt = document.getElementById('driveStatusText');
-            el.className = 'drive-status' + (connected ? ' connected' : '');
-            el.title = connected ? 'Google Drive connected' : (text || 'Not connected');
+            el.className = 'drive-status' + (connected === true ? ' connected' : '');
+            el.title = connected === true ? 'Google Drive connected' : (text || 'Not connected');
             txt.textContent = text || 'Drive';
         }
 
-        // ─── Drive API helpers ───────────────────────────────────────────────────────
+        // ─── Drive REST helpers ──────────────────────────────────────────────────────
 
         async function driveGet(url) {
             const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gAccessToken } });
-            if (res.status === 401) { gAccessToken = null; updateDriveStatus(false, 'Session expired'); }
-            return res.json();
-        }
-
-        async function drivePatch(url, body) {
-            const res = await fetch(url, {
-                method: 'PATCH',
-                headers: { Authorization: 'Bearer ' + gAccessToken, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            return res.json();
+            if (res.status === 401) {
+                gAccessToken = null;
+                updateDriveStatus(false, 'Session expired');
+                throw new Error('Drive session expired — please reconnect.');
+            }
+            const json = await res.json();
+            if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+            return json;
         }
 
         async function ensureFolder() {
@@ -1278,16 +1319,19 @@
             const data = await driveGet(`${DRIVE_API}/files?q=${q}&fields=files(id,name)`);
             if (data.files && data.files.length > 0) {
                 gDriveFolderId = data.files[0].id;
+                console.log('[Drive] found folder id', gDriveFolderId);
                 return gDriveFolderId;
             }
-            // Create folder
+            // Create the folder
             const res = await fetch(`${DRIVE_API}/files`, {
                 method: 'POST',
                 headers: { Authorization: 'Bearer ' + gAccessToken, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
             });
             const folder = await res.json();
+            if (folder.error) throw new Error(folder.error.message);
             gDriveFolderId = folder.id;
+            console.log('[Drive] created folder id', gDriveFolderId);
             return gDriveFolderId;
         }
 
@@ -1302,70 +1346,46 @@
             const res = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
                 headers: { Authorization: 'Bearer ' + gAccessToken }
             });
+            if (!res.ok) throw new Error('Download failed: ' + res.status);
             return res.text();
         }
 
         async function uploadFile(name, content, existingId = null) {
-            const metadata = existingId
-                ? {}
-                : { name, parents: [gDriveFolderId], mimeType: 'application/json' };
-            const boundary = 'budget_boundary_' + Date.now();
-            const body = existingId
-                ? new Blob([content], { type: 'application/json' })
-                : new Blob([
-                    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-                    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n`,
-                    `--${boundary}--`
-                  ]);
-
-            const url = existingId
-                ? `${UPLOAD_API}/files/${existingId}?uploadType=media`
-                : `${UPLOAD_API}/files?uploadType=multipart`;
-
-            const res = await fetch(url, {
-                method: existingId ? 'PATCH' : 'POST',
-                headers: {
-                    Authorization: 'Bearer ' + gAccessToken,
-                    ...(existingId ? { 'Content-Type': 'application/json' } : { 'Content-Type': `multipart/related; boundary=${boundary}` })
-                },
-                body: body
-            });
-            return res.json();
+            const boundary = 'bud_' + Date.now();
+            if (existingId) {
+                // PATCH just the content
+                const res = await fetch(`${UPLOAD_API}/files/${existingId}?uploadType=media`, {
+                    method: 'PATCH',
+                    headers: { Authorization: 'Bearer ' + gAccessToken, 'Content-Type': 'application/json' },
+                    body: content
+                });
+                const j = await res.json();
+                if (j.error) throw new Error(j.error.message);
+                return j;
+            } else {
+                // Multipart POST with metadata + body
+                const meta = JSON.stringify({ name, parents: [gDriveFolderId], mimeType: 'application/json' });
+                const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+                const res = await fetch(`${UPLOAD_API}/files?uploadType=multipart`, {
+                    method: 'POST',
+                    headers: { Authorization: 'Bearer ' + gAccessToken, 'Content-Type': `multipart/related; boundary=${boundary}` },
+                    body
+                });
+                const j = await res.json();
+                if (j.error) throw new Error(j.error.message);
+                return j;
+            }
         }
 
         async function renameFile(fileId, newName) {
-            return drivePatch(`${DRIVE_API}/files/${fileId}`, { name: newName });
-        }
-
-        // ─── Auto-load ───────────────────────────────────────────────────────────────
-
-        async function driveAutoLoad() {
-            if (!resolvedClientId) return;
-            // Silent token request — only proceeds if user already granted permission
-            gTokenClient.callback = (resp) => {
-                if (!resp.error) {
-                    gAccessToken = resp.access_token;
-                    updateDriveStatus(true, 'Connected');
-                    tryLoadDefaultFile();
-                }
-                gTokenClient.callback = onTokenResponseWithCallback;
-            };
-            gTokenClient.requestAccessToken({ prompt: 'none' });
-        }
-
-        async function tryLoadDefaultFile() {
-            try {
-                await ensureFolder();
-                const files = await listJsonFiles();
-                const defaultFile = files.find(f => f.name === 'data.json');
-                if (defaultFile) {
-                    const content = await downloadFile(defaultFile.id);
-                    loadLedgerFromString(content, 'data.json');
-                    showMessage('Loaded data.json from Google Drive');
-                }
-            } catch (e) {
-                // Silently fail on auto-load
-            }
+            const res = await fetch(`${DRIVE_API}/files/${fileId}`, {
+                method: 'PATCH',
+                headers: { Authorization: 'Bearer ' + gAccessToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName })
+            });
+            const j = await res.json();
+            if (j.error) throw new Error(j.error.message);
+            return j;
         }
 
         function loadLedgerFromString(content, name) {
@@ -1384,13 +1404,11 @@
 
         function openDriveOpenModal() {
             document.getElementById('driveOpenModal').classList.add('active');
-            document.getElementById('driveSetupNote').style.display = resolvedClientId ? 'none' : 'block';
-            if (gAccessToken) {
+            document.getElementById('driveSetupNote').style.display =
+                window.location.protocol === 'file:' ? 'block' : 'none';
+            withDriveAuth(() => {
                 loadDriveFileList();
-            } else {
-                document.getElementById('driveFileList').innerHTML = '<div class="drive-empty">Connecting to Google Drive…</div>';
-                requestDriveAccess(loadDriveFileList);
-            }
+            });
         }
 
         function closeDriveOpenModal() {
@@ -1410,17 +1428,17 @@
                 files.forEach(file => {
                     const item = document.createElement('div');
                     item.className = 'drive-file-item';
-                    const modified = new Date(file.modifiedTime).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                    const size = file.size ? (Math.round(file.size / 1024 * 10) / 10) + ' KB' : '';
-                    item.innerHTML = `
-                        <div class="drive-file-name">${escapeHtml(file.name)}</div>
-                        <div class="drive-file-meta">${modified}<br>${size}</div>
-                    `;
+                    const modified = new Date(file.modifiedTime).toLocaleDateString('en-US', {
+                        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    });
+                    const kb = file.size ? (Math.round(file.size / 102.4) / 10) + ' KB' : '';
+                    item.innerHTML = `<div class="drive-file-name">${escapeHtml(file.name)}</div>
+                                      <div class="drive-file-meta">${modified}<br>${kb}</div>`;
                     item.onclick = () => openDriveFile(file.id, file.name, item);
                     listEl.appendChild(item);
                 });
             } catch (e) {
-                listEl.innerHTML = '<div class="drive-empty">Error loading files. Check your connection.</div>';
+                listEl.innerHTML = `<div class="drive-empty">Error: ${escapeHtml(e.message)}</div>`;
             }
         }
 
@@ -1435,6 +1453,7 @@
             } catch (e) {
                 showMessage('Error loading file: ' + e.message, 'error');
                 itemEl.classList.remove('loading-file');
+                itemEl.querySelector('.drive-file-name').textContent = fileName;
             }
         }
 
@@ -1458,9 +1477,9 @@
             if (checked) {
                 const base = name.replace(/\.json$/i, '');
                 const today = new Date().toISOString().split('T')[0];
-                preview.textContent = `Existing file will be renamed to: ${base}_${today}.json`;
+                preview.textContent = `Existing "${name}" will be renamed to ${base}_${today}.json`;
             } else {
-                preview.textContent = 'Existing file will be overwritten.';
+                preview.textContent = `Existing "${name}" will be overwritten without backup.`;
             }
         }
 
@@ -1472,12 +1491,11 @@
         async function executeDriveSave() {
             const name = document.getElementById('driveSaveFileName').value.trim() || 'data.json';
             const renameExisting = document.getElementById('driveRenameExisting').checked;
-
             const btn = document.getElementById('driveSaveBtn');
-            btn.textContent = 'Saving…';
-            btn.disabled = true;
 
             const doSave = async () => {
+                btn.textContent = 'Saving…';
+                btn.disabled = true;
                 try {
                     await ensureFolder();
                     const content = JSON.stringify(ledgerData, null, 2);
@@ -1485,15 +1503,13 @@
                     const existing = files.find(f => f.name === name);
 
                     if (existing && renameExisting) {
-                        // Fetch the actual modified time from the file metadata
                         const meta = await driveGet(`${DRIVE_API}/files/${existing.id}?fields=modifiedTime`);
                         const modDate = new Date(meta.modifiedTime).toISOString().split('T')[0];
                         const base = name.replace(/\.json$/i, '');
                         const renamedTo = `${base}_${modDate}.json`;
                         await renameFile(existing.id, renamedTo);
-                        showMessage(`Renamed existing file to ${renamedTo}`);
-                        // Now upload as new file (no existing id since we renamed)
-                        await uploadFile(name, content, null);
+                        showMessage(`Renamed old file to ${renamedTo}`);
+                        await uploadFile(name, content, null);     // fresh upload
                     } else if (existing) {
                         await uploadFile(name, content, existing.id);
                     } else {
@@ -1502,21 +1518,18 @@
 
                     ledgerData.fileName = name;
                     updateFileName();
-                    showMessage('Saved ' + name + ' to Google Drive');
+                    showMessage('Saved ' + name + ' to Google Drive ✓');
                     closeDriveSaveModal();
                 } catch (e) {
                     showMessage('Error saving to Drive: ' + e.message, 'error');
+                    console.error('[Drive] save error', e);
                 } finally {
                     btn.textContent = 'Save to Drive';
                     btn.disabled = false;
                 }
             };
 
-            if (!gAccessToken) {
-                requestDriveAccess(doSave);
-            } else {
-                doSave();
-            }
+            withDriveAuth(doSave);
         }
 
         // ─── Application State ───────────────────────────────────────────────────────
