@@ -15,23 +15,25 @@
 
     <!-- 
         Todo:
-        Bank Statements
-            Each account has a statement which declares the starting balance, ending balance, and dates covered
+        Statements
+            Each account has a statement each month which declares the starting balance, ending balance, dates covered, total deposits, and total withdrawals for the month
             Simple sanity checking with deposit/withdrawal totals and starting/ending balances
         Transaction conditions
-            Transactions are complete once account withdrawal totals match statement totals for the month
-        Rename Categories -> Envelopes        
+            Transactions are complete for the month once account withdrawal totals match statement totals for the month
+            Transactions must also have envelopes assigned to be complete for the month
+        Refactor Envelopes
+            Added explicitly, not inferred from Transactions
             Transactions deduct from envelope balance
             Envelopes have manual or automatic funding rules
-            Envelopes are complete once total funding matches account balance totals
+            Envelopes are complete for the month once total funding matches account balance totals
         Paycheck tracking
-            Complete once account deposit totals match statement totals for the month
+            Complete for the month once account deposit totals match statement totals for the month
         Import generator with merchant lookup
             Seperate application that generates CSVs for importing based on user-provided rules and historical transaction data
         Goals
             Set target amounts for envelopes and track progress
         Charts
-            Spending by category over time
+            Spending by envelope over time
             Account balances over time
     -->
 
@@ -64,7 +66,8 @@
     <div class="tabs">
         <button class="tab active" onclick="switchTab('summary')">Summary</button>
         <button class="tab" onclick="switchTab('accounts')">Accounts</button>
-        <button class="tab" onclick="switchTab('categories')">Categories</button>
+        <button class="tab" onclick="switchTab('statements')">Statements</button>
+        <button class="tab" onclick="switchTab('envelopes')">Envelopes</button>
         <button class="tab" onclick="switchTab('transactions')">Transactions</button>
     </div>
 
@@ -112,20 +115,20 @@
             </section>
         </div>
 
-        <div id="categoriesTab" class="tab-content">
+        <div id="envelopesTab" class="tab-content">
             <section>
                 <div class="section-header">
-                    <h2 class="section-title">Category Spending</h2>
+                    <h2 class="section-title">Envelopes</h2>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortTable('categories', 'name')">Category</th>
-                                <th class="sortable" style="text-align: right;" onclick="sortTable('categories', 'total')">Total</th>
+                                <th class="sortable" onclick="sortTable('envelopes', 'name')">Envelope</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('envelopes', 'total')">Total</th>
                             </tr>
                         </thead>
-                        <tbody id="categoriesBody"></tbody>
+                        <tbody id="envelopesBody"></tbody>
                     </table>
                 </div>
             </section>
@@ -150,7 +153,7 @@
                                 <th class="sortable" onclick="sortTable('transactions', 'month')">Month</th>
                                 <th class="sortable" onclick="sortTable('transactions', 'account')">Account</th>
                                 <th class="sortable" onclick="sortTable('transactions', 'description')">Description</th>
-                                <th class="sortable" onclick="sortTable('transactions', 'category')">Category</th>
+                                <th class="sortable" onclick="sortTable('transactions', 'envelope')">Envelope</th>
                                 <th class="sortable" style="text-align: right;" onclick="sortTable('transactions', 'amount')">Amount</th>
                             </tr>
                         </thead>
@@ -262,15 +265,15 @@
                         <input type="text" id="transactionDescription" placeholder="e.g., Grocery shopping" required>
                     </div>
                     <div class="form-group">
-                        <label for="transactionCategory">Category</label>
-                        <select id="transactionCategory" onchange="onCategorySelectChange()"></select>
+                        <label for="transactionEnvelope">Envelope</label>
+                        <select id="transactionEnvelope" onchange="onEnvelopeSelectChange()"></select>
                     </div>
-                    <div class="form-group" id="newCategoryGroup" style="display: none;">
-                        <label for="newCategoryName">New Category Name</label>
-                        <input type="text" id="newCategoryName" placeholder="e.g., Food, Utilities, Income">
+                    <div class="form-group" id="newEnvelopeGroup" style="display: none;">
+                        <label for="newEnvelopeName">New Envelope Name</label>
+                        <input type="text" id="newEnvelopeName" placeholder="e.g., Food, Utilities, Income">
                     </div>
-                    <div class="form-group" id="categoryColorGroup" style="display: none;">
-                        <label>Category Color</label>
+                    <div class="form-group" id="envelopeColorGroup" style="display: none;">
+                        <label>Envelope Color</label>
                         <div class="color-picker-group">
                             <div class="color-presets">
                                 <button type="button" class="color-preset" style="background: #2D5F3F;" data-color="#2D5F3F"></button>
@@ -281,7 +284,7 @@
                                 <button type="button" class="color-preset" style="background: #EF4444;" data-color="#EF4444"></button>
                             </div>
                             <div class="color-hex-input">
-                                <input type="text" id="categoryColorHex" placeholder="#000000" maxlength="7">
+                                <input type="text" id="envelopeColorHex" placeholder="#000000" maxlength="7">
                                 <div class="color-preview" id="colorPreview" style="background: #2D5F3F;"></div>
                             </div>
                         </div>
@@ -436,9 +439,9 @@
     <script src="gdrive.js"></script>
     <script>
         // ─── Application State ───────────────────────────────────────────────────────
-        let ledgerData = { accounts: [], transactions: [], categories: {}, fileName: null };
+        let ledgerData = { accounts: [], transactions: [], envelopes: {}, fileName: null };
         let selectedMonth = null;
-        let selectedCategoryColor = '#2D5F3F';
+        let selectedEnvelopeColor = '#2D5F3F';
         let sortState = { table: null, column: null, direction: 'asc' };
         let selectedTransactions = new Set();
         let lastSelectedIndex = -1;
@@ -481,7 +484,7 @@
                     selectColor(btn.dataset.color);
                 });
             });
-            document.getElementById('categoryColorHex').addEventListener('input', (e) => {
+            document.getElementById('envelopeColorHex').addEventListener('input', (e) => {
                 if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) selectColor(e.target.value);
             });
         }
@@ -515,20 +518,20 @@
         }
 
         function selectColor(color) {
-            selectedCategoryColor = color;
+            selectedEnvelopeColor = color;
             document.getElementById('colorPreview').style.background = color;
-            document.getElementById('categoryColorHex').value = color;
+            document.getElementById('envelopeColorHex').value = color;
             document.querySelectorAll('.color-preset').forEach(btn => {
                 btn.classList.toggle('selected', btn.dataset.color.toLowerCase() === color.toLowerCase());
             });
         }
 
-        function onCategorySelectChange() {
-            const val = document.getElementById('transactionCategory').value;
+        function onEnvelopeSelectChange() {
+            const val = document.getElementById('transactionEnvelope').value;
             const show = val === '__new__';
-            document.getElementById('newCategoryGroup').style.display = show ? 'block' : 'none';
-            document.getElementById('categoryColorGroup').style.display = show ? 'block' : 'none';
-            if (show) setTimeout(() => document.getElementById('newCategoryName').focus(), 50);
+            document.getElementById('newEnvelopeGroup').style.display = show ? 'block' : 'none';
+            document.getElementById('envelopeColorGroup').style.display = show ? 'block' : 'none';
+            if (show) setTimeout(() => document.getElementById('newEnvelopeName').focus(), 50);
         }
 
         function showMessage(msg, type = 'success') {
@@ -564,7 +567,7 @@
                         try {
                             ledgerData = JSON.parse(event.target.result);
                             ledgerData.fileName = file.name;
-                            if (!ledgerData.categories) ledgerData.categories = {};
+                            if (!ledgerData.envelopes) ledgerData.envelopes = {};
                             updateUI();
                             showMessage('File loaded successfully!');
                         } catch {
@@ -650,7 +653,7 @@
 
             const newTransactions = [];
             const newAccounts = new Set();
-            const newCategories = new Set();
+            const newEnvelopes = new Set();
 
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map(v => v.trim());
@@ -660,15 +663,15 @@
                 header.forEach((col, idx) => row[col] = values[idx]);
 
                 const account = row.account;
-                const category = row.category || '';
+                const envelope = row.envelope || '';
                 const month = row.month ? parseInt(row.month) : new Date(row.date).getMonth() + 1;
 
                 if (!ledgerData.accounts.find(a => a.name === account)) {
                     newAccounts.add(account);
                 }
 
-                if (category && !ledgerData.categories[category]) {
-                    newCategories.add(category);
+                if (envelope && !ledgerData.envelopes[envelope]) {
+                    newEnvelopes.add(envelope);
                 }
 
                 newTransactions.push({
@@ -677,19 +680,19 @@
                     account: account,
                     amount: parseFloat(row.amount),
                     description: row.description,
-                    category: category
+                    envelope: envelope
                 });
             }
 
-            if (newAccounts.size > 0 || newCategories.size > 0) {
-                showImportConfirmModal(newTransactions, Array.from(newAccounts), Array.from(newCategories));
+            if (newAccounts.size > 0 || newEnvelopes.size > 0) {
+                showImportConfirmModal(newTransactions, Array.from(newAccounts), Array.from(newEnvelopes));
             } else {
                 finishImport(newTransactions, [], []);
             }
         }
 
-        function showImportConfirmModal(transactions, accounts, categories) {
-            pendingAction = { type: 'import', transactions, accounts, categories };
+        function showImportConfirmModal(transactions, accounts, envelopes) {
+            pendingAction = { type: 'import', transactions, accounts, envelopes };
             
             let html = '<p>The CSV contains the following new items:</p>';
             
@@ -699,9 +702,9 @@
                 html += '</ul></div>';
             }
 
-            if (categories.length > 0) {
-                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Categories:</div><ul>';
-                categories.forEach(c => html += `<li>${escapeHtml(c)}</li>`);
+            if (envelopes.length > 0) {
+                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>';
+                envelopes.forEach(e => html += `<li>${escapeHtml(e)}</li>`);
                 html += '</ul></div>';
             }
 
@@ -713,7 +716,7 @@
             document.getElementById('confirmModal').classList.add('active');
         }
 
-        function finishImport(transactions, accounts, categories) {
+        function finishImport(transactions, accounts, envelopes) {
             accounts.forEach(name => {
                 ledgerData.accounts.push({
                     id: Date.now().toString() + Math.random(),
@@ -722,8 +725,8 @@
                 });
             });
 
-            categories.forEach(name => {
-                ledgerData.categories[name] = { color: '#2D5F3F' };
+            envelopes.forEach(name => {
+                ledgerData.envelopes[name] = { color: '#2D5F3F' };
             });
 
             transactions.forEach(t => {
@@ -736,7 +739,7 @@
                         accountId: account.id,
                         amount: t.amount,
                         description: t.description,
-                        category: t.category
+                        envelope: t.envelope
                     });
                 }
             });
@@ -791,7 +794,7 @@
 
             switch (pendingAction.type) {
                 case 'import':
-                    finishImport(pendingAction.transactions, pendingAction.accounts, pendingAction.categories);
+                    finishImport(pendingAction.transactions, pendingAction.accounts, pendingAction.envelopes);
                     break;
                 case 'deleteAccount':
                     ledgerData.accounts = ledgerData.accounts.filter(a => a.id !== pendingAction.id);
@@ -893,8 +896,8 @@
                     populateAccountSelects();
                     document.getElementById('transactionAccount').value = transaction.accountId;
                     
-                    populateCategorySelect();
-                    document.getElementById('transactionCategory').value = transaction.category || '';
+                    populateEnvelopeSelect();
+                    document.getElementById('transactionEnvelope').value = transaction.envelope || '';
                 }
             } else {
                 document.getElementById('transactionModalTitle').textContent = 'Add Transaction';
@@ -903,12 +906,12 @@
                 setTodayDate();
                 document.getElementById('deleteTransactionBtn').style.display = 'none';
                 populateAccountSelects();
-                populateCategorySelect();
+                populateEnvelopeSelect();
             }
 
             document.getElementById('transactionModal').classList.add('active');
-            document.getElementById('newCategoryGroup').style.display = 'none';
-            document.getElementById('categoryColorGroup').style.display = 'none';
+            document.getElementById('newEnvelopeGroup').style.display = 'none';
+            document.getElementById('envelopeColorGroup').style.display = 'none';
             setTimeout(() => document.getElementById('transactionDate').focus(), 100);
         }
 
@@ -916,19 +919,19 @@
             document.getElementById('transactionModal').classList.remove('active');
         }
 
-        function populateCategorySelect() {
-            const select = document.getElementById('transactionCategory');
-            const cats = Object.keys(ledgerData.categories || {}).sort();
-            select.innerHTML = '<option value="">Select or create category...</option>';
-            cats.forEach(cat => {
+        function populateEnvelopeSelect() {
+            const select = document.getElementById('transactionEnvelope');
+            const envs = Object.keys(ledgerData.envelopes || {}).sort();
+            select.innerHTML = '<option value="">Select or create envelope...</option>';
+            envs.forEach(env => {
                 const opt = document.createElement('option');
-                opt.value = cat;
-                opt.textContent = cat;
+                opt.value = env;
+                opt.textContent = env;
                 select.appendChild(opt);
             });
             const newOpt = document.createElement('option');
             newOpt.value = '__new__';
-            newOpt.textContent = '+ Create New Category';
+            newOpt.textContent = '+ Create New Envelope';
             select.appendChild(newOpt);
         }
 
@@ -939,13 +942,13 @@
             const accountId = document.getElementById('transactionAccount').value;
             const amount = parseFloat(document.getElementById('transactionAmount').value);
             const description = document.getElementById('transactionDescription').value.trim();
-            let category = document.getElementById('transactionCategory').value;
+            let envelope = document.getElementById('transactionEnvelope').value;
 
-            if (category === '__new__') {
-                const newName = document.getElementById('newCategoryName').value.trim();
-                if (!newName) return showMessage('Please enter a category name', 'error');
-                category = newName;
-                ledgerData.categories[category] = { color: selectedCategoryColor };
+            if (envelope === '__new__') {
+                const newName = document.getElementById('newEnvelopeName').value.trim();
+                if (!newName) return showMessage('Please enter an envelope name', 'error');
+                envelope = newName;
+                ledgerData.envelopes[envelope] = { color: selectedEnvelopeColor };
             }
 
             if (!date || !month || !accountId || !description) return showMessage('Please fill in all required fields', 'error');
@@ -958,10 +961,10 @@
                     transaction.accountId = accountId;
                     transaction.amount = amount;
                     transaction.description = description;
-                    transaction.category = category;
+                    transaction.envelope = envelope;
                 }
             } else {
-                ledgerData.transactions.push({ id: Date.now().toString(), date, month, accountId, amount, description, category });
+                ledgerData.transactions.push({ id: Date.now().toString(), date, month, accountId, amount, description, envelope });
             }
 
             markUnsaved();
@@ -993,8 +996,8 @@
             if (fromId === toId) return showMessage('Source and destination accounts must be different', 'error');
 
             const ts = Date.now().toString();
-            ledgerData.transactions.push({ id: ts + '-from', date, month, accountId: fromId, amount: -amount, description: description + ' (Transfer Out)', category: 'Transfer' });
-            ledgerData.transactions.push({ id: ts + '-to', date, month, accountId: toId, amount: amount, description: description + ' (Transfer In)', category: 'Transfer' });
+            ledgerData.transactions.push({ id: ts + '-from', date, month, accountId: fromId, amount: -amount, description: description + ' (Transfer Out)', envelope: 'Transfer' });
+            ledgerData.transactions.push({ id: ts + '-to', date, month, accountId: toId, amount: amount, description: description + ' (Transfer In)', envelope: 'Transfer' });
 
             markUnsaved();
             updateUI();
@@ -1110,7 +1113,7 @@
             updateSummary();
             updateAccountsTable();
             updateTransactionsTable();
-            updateCategoriesTable();
+            updateEnvelopesTable();
         }
 
         function updateFileName() {
@@ -1214,7 +1217,7 @@
                             valB = accB ? accB.name.toLowerCase() : '';
                             break;
                         case 'description': valA = a.description.toLowerCase(); valB = b.description.toLowerCase(); break;
-                        case 'category': valA = (a.category || '').toLowerCase(); valB = (b.category || '').toLowerCase(); break;
+                        case 'envelope': valA = (a.envelope || '').toLowerCase(); valB = (b.envelope || '').toLowerCase(); break;
                         case 'amount': valA = a.amount; valB = b.amount; break;
                         default: valA = a.date; valB = b.date;
                     }
@@ -1226,7 +1229,7 @@
 
             tbody.innerHTML = sorted.map((t, idx) => {
                 const a = ledgerData.accounts.find(x => x.id === t.accountId);
-                const color = t.category && ledgerData.categories[t.category] ? ledgerData.categories[t.category].color : '#2D5F3F';
+                const color = t.envelope && ledgerData.envelopes[t.envelope] ? ledgerData.envelopes[t.envelope].color : '#2D5F3F';
                 const checked = selectedTransactions.has(t.id) ? 'checked' : '';
                 return `<tr onclick="handleTransactionClick('${t.id}', ${idx}, event)">
                     <td><input type="checkbox" ${checked} data-id="${t.id}"></td>
@@ -1234,7 +1237,7 @@
                     <td>${getMonthName(t.month)}</td>
                     <td>${a ? escapeHtml(a.name) : 'Unknown'}</td>
                     <td>${escapeHtml(t.description)}</td>
-                    <td>${t.category ? `<span class="category-tag" style="background-color:${color}20;color:${color};">${escapeHtml(t.category)}</span>` : '—'}</td>
+                    <td>${t.envelope ? `<span class="envelope-tag" style="background-color:${color}20;color:${color};">${escapeHtml(t.envelope)}</span>` : '—'}</td>
                     <td class="amount ${t.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(t.amount)}</td>
                 </tr>`;
             }).join('');
@@ -1242,16 +1245,16 @@
             updateSelectionUI();
         }
 
-        function updateCategoriesTable() {
-            const tbody = document.getElementById('categoriesBody');
+        function updateEnvelopesTable() {
+            const tbody = document.getElementById('envelopesBody');
             const filt = getFilteredTransactions();
             const totals = {};
-            filt.forEach(t => { if (t.category && t.category !== 'Transfer') totals[t.category] = (totals[t.category] || 0) + t.amount; });
+            filt.forEach(t => { if (t.envelope && t.envelope !== 'Transfer') totals[t.envelope] = (totals[t.envelope] || 0) + t.amount; });
             
-            let cats = Object.entries(totals);
+            let envs = Object.entries(totals);
 
-            if (sortState.table === 'categories') {
-                cats.sort((a, b) => {
+            if (sortState.table === 'envelopes') {
+                envs.sort((a, b) => {
                     let valA = sortState.column === 'name' ? a[0].toLowerCase() : a[1];
                     let valB = sortState.column === 'name' ? b[0].toLowerCase() : b[1];
                     return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
@@ -1261,15 +1264,15 @@
             }
 
             if (cats.length === 0) {
-                const msg = selectedMonth ? 'No category data for this month' : 'No category data';
-                const desc = selectedMonth ? 'Add transactions or select a different month' : 'Categories will appear once you add transactions';
+                const msg = selectedMonth ? 'No envelope data for this month' : 'No envelope data';
+                const desc = selectedMonth ? 'Add transactions or select a different month' : 'Envelopes will appear once you add transactions';
                 tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
                 return;
             }
 
             tbody.innerHTML = cats.map(([cat, tot]) => {
-                const color = ledgerData.categories[cat] ? ledgerData.categories[cat].color : '#2D5F3F';
-                return `<tr style="cursor: default;"><td><span class="category-tag" style="background-color:${color}20;color:${color};">${escapeHtml(cat)}</span></td><td class="amount ${tot >= 0 ? 'positive' : 'negative'}">${formatCurrency(tot)}</td></tr>`;
+                const color = ledgerData.envelopes[cat] ? ledgerData.envelopes[cat].color : '#2D5F3F';
+                return `<tr style="cursor: default;"><td><span class="envelope-tag" style="background-color:${color}20;color:${color};">${escapeHtml(cat)}</span></td><td class="amount ${tot >= 0 ? 'positive' : 'negative'}">${formatCurrency(tot)}</td></tr>`;
             }).join('');
         }
 
