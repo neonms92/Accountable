@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Budget Ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-paper: #FDFDF8;
+            --color-ink: #1A1A1A;
+            --color-ink-muted: #6B6B6B;
+            --color-ink-light: #9B9B9B;
+            --color-line: #E5E5DD;
+            --color-line-heavy: #D0D0C8;
+            --color-accent: #2D5F3F;
+            --color-accent-light: #E8F1EC;
+            --color-negative: #8B2B2B;
+            --color-negative-light: #F5E8E8;
+            --color-positive: #2D5F3F;
+            
+            --font-mono: 'IBM Plex Mono', monospace;
+            --font-serif: 'Crimson Pro', serif;
+            
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-mono);
+            background: var(--color-paper);
+            color: var(--color-ink);
+            line-height: 1.6;
+            font-size: 14px;
+            overflow-x: hidden;
+        }
+        
+        header {
+            background: var(--color-paper);
+            border-bottom: 2px solid var(--color-line-heavy);
+            padding: 2rem 3rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            background: rgba(253, 253, 248, 0.95);
+            animation: slideDown 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            font-family: var(--font-serif);
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        
+        .file-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .file-name {
+            font-size: 0.875rem;
+            color: var(--color-ink-muted);
+            font-style: italic;
+        }
+        
+        button, .button {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            padding: 0.625rem 1.25rem;
+            background: var(--color-ink);
+            color: var(--color-paper);
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+        
+        button:hover {
+            background: var(--color-accent);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        button.secondary {
+            background: transparent;
+            color: var(--color-ink);
+            border: 1px solid var(--color-line-heavy);
+        }
+        
+        button.secondary:hover {
+            background: var(--color-accent-light);
+            border-color: var(--color-accent);
+            color: var(--color-accent);
+        }
+
+        button.danger {
+            background: var(--color-negative);
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #6B1F1F;
+        }
+        
+        /* Floating Messages */
+        .message-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-width: 400px;
+        }
+
+        .floating-message {
+            padding: 1rem 1.5rem;
+            border-left: 3px solid;
+            font-size: 0.875rem;
+            box-shadow: var(--shadow-lg);
+            animation: slideInRight 0.3s ease;
+            cursor: pointer;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .floating-message.error {
+            background: var(--color-negative-light);
+            color: var(--color-negative);
+            border-color: var(--color-negative);
+        }
+        
+        .floating-message.success {
+            background: var(--color-accent-light);
+            color: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+        
+        .controls-bar {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+            background: white;
+            border-bottom: 1px solid var(--color-line);
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        .month-selector {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .month-selector label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin: 0;
+        }
+        
+        .month-selector select {
+            min-width: 200px;
+            padding: 0.625rem 1rem;
+            border: 1px solid var(--color-line-heavy);
+            background: var(--color-paper);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        
+        .tabs {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 3rem;
+            background: white;
+            border-bottom: 2px solid var(--color-line-heavy);
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .tab {
+            padding: 1rem 1.5rem;
+            background: transparent;
+            color: var(--color-ink-muted);
+            border: none;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        
+        .tab:hover {
+            color: var(--color-ink);
+            background: var(--color-accent-light);
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .tab.active {
+            color: var(--color-accent);
+            border-bottom-color: var(--color-accent);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem;
+            animation: fadeIn 0.8s ease 0.2s both;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+        }
+        
+        .summary-card {
+            background: white;
+            border: 1px solid var(--color-line);
+            padding: 2rem;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .summary-card-header {
+            font-family: var(--font-serif);
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .summary-card-subheader {
+            font-size: 0.75rem;
+            color: var(--color-ink-light);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--color-line);
+        }
+        
+        .summary-value {
+            font-size: 2rem;
+            font-weight: 500;
+            letter-spacing: -0.02em;
+        }
+        
+        .summary-delta {
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 0.5rem;
+        }
+        
+        .summary-delta.positive {
+            color: var(--color-positive);
+        }
+        
+        .summary-delta.negative {
+            color: #CC6600;
+        }
+        
+        .summary-delta::before {
+            content: '+';
+        }
+        
+        .summary-delta.negative::before {
+            content: '';
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--color-line-heavy);
+        }
+        
+        .section-title {
+            font-family: var(--font-serif);
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+        
+        .table-container {
+            background: white;
+            border: 1px solid var(--color-line);
+            overflow-x: auto;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        thead {
+            background: var(--color-paper);
+            border-bottom: 2px solid var(--color-line-heavy);
+        }
+        
+        th {
+            text-align: left;
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        th:hover {
+            background: var(--color-accent-light);
+        }
+
+        th.sortable::after {
+            content: ' ↕';
+            opacity: 0.3;
+        }
+
+        th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+        
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--color-line);
+        }
+        
+        tbody tr {
+            transition: background 0.15s ease;
+            cursor: pointer;
+        }
+        
+        tbody tr:hover {
+            background: var(--color-accent-light);
+        }
+
+        tbody tr.selected {
+            background: #E8F1EC;
+        }
+        
+        .amount {
+            font-family: var(--font-mono);
+            font-weight: 500;
+            text-align: right;
+        }
+        
+        .amount.positive { color: var(--color-positive); }
+        .amount.negative { color: var(--color-negative); }
+        
+        .date {
+            font-family: var(--font-mono);
+            color: var(--color-ink-muted);
+        }
+        
+        .category-tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--color-ink-muted);
+        }
+        
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+        
+        .empty-state-title {
+            font-family: var(--font-serif);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-ink);
+        }
+
+        .selection-bar {
+            background: white;
+            border: 1px solid var(--color-line);
+            border-top: none;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .selection-info {
+            font-size: 0.875rem;
+            color: var(--color-ink-muted);
+        }
+
+        .selection-info strong {
+            color: var(--color-ink);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(26, 26, 26, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--color-paper);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        @keyframes modalSlideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-header {
+            padding: 2rem;
+            border-bottom: 1px solid var(--color-line);
+        }
+        
+        .modal-title {
+            font-family: var(--font-serif);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .modal-body {
+            padding: 2rem;
+        }
+        
+        .modal-footer {
+            padding: 2rem;
+            border-top: 1px solid var(--color-line);
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+        }
+
+        .modal-footer-left {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .modal-footer-right {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--color-line-heavy);
+            background: white;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px var(--color-accent-light);
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        .action-row {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .color-picker-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .color-presets {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 0.5rem;
+        }
+        
+        .color-preset {
+            width: 100%;
+            aspect-ratio: 1;
+            border: 2px solid var(--color-line-heavy);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+        
+        .color-preset:hover {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .color-preset.selected {
+            border-color: var(--color-ink);
+            border-width: 3px;
+            transform: scale(1.05);
+        }
+        
+        .color-hex-input {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .color-hex-input input {
+            flex: 1;
+        }
+        
+        .color-preview {
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--color-line-heavy);
+        }
+
+        .confirmation-list {
+            background: var(--color-accent-light);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-left: 3px solid var(--color-accent);
+        }
+
+        .confirmation-list-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--color-accent);
+        }
+
+        .confirmation-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .confirmation-list li {
+            padding: 0.25rem 0;
+        }
+        
+        @media (max-width: 768px) {
+            header, .controls-bar, .tabs { padding-left: 1.5rem; padding-right: 1.5rem; }
+            main { padding: 1.5rem; }
+            .header-content { flex-direction: column; gap: 1rem; align-items: flex-start; }
+            .controls-bar { flex-direction: column; align-items: flex-start; }
+            .summary-grid { grid-template-columns: 1fr; }
+            th, td { padding: 0.75rem 1rem; }
+            .message-container { max-width: calc(100% - 2rem); }
+        }
+    </style>
+</head>
+<body>
+    <div class="message-container" id="messageContainer"></div>
+
+    <header>
+        <div class="header-content">
+            <h1>Personal Budget Ledger</h1>
+            <div class="file-controls">
+                <span class="file-name" id="fileName">No file loaded</span>
+                <button onclick="openFile()" class="secondary">Open File</button>
+                <button onclick="saveFile()">Save</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="controls-bar">
+        <div class="month-selector">
+            <label for="monthSelect">Month:</label>
+            <select id="monthSelect" onchange="onMonthChange()">
+                <option value="">All Months</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('summary')">Summary</button>
+        <button class="tab" onclick="switchTab('accounts')">Accounts</button>
+        <button class="tab" onclick="switchTab('categories')">Categories</button>
+        <button class="tab" onclick="switchTab('transactions')">Transactions</button>
+    </div>
+
+    <main>
+        <div id="summaryTab" class="tab-content active">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-card-header">Net Worth</div>
+                    <div class="summary-card-subheader">Year to Date</div>
+                    <div class="summary-value" id="netWorthYTD">$0.00</div>
+                    <div class="summary-delta" id="netWorthDelta">$0.00</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-header">Total Assets</div>
+                    <div class="summary-card-subheader">Year to Date</div>
+                    <div class="summary-value positive" id="totalAssetsYTD">$0.00</div>
+                    <div class="summary-delta" id="totalAssetsDelta">$0.00</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-header">Total Liabilities</div>
+                    <div class="summary-card-subheader">Year to Date</div>
+                    <div class="summary-value negative" id="totalLiabilitiesYTD">$0.00</div>
+                    <div class="summary-delta" id="totalLiabilitiesDelta">$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="accountsTab" class="tab-content">
+            <section>
+                <div class="section-header">
+                    <h2 class="section-title">Accounts</h2>
+                    <button onclick="openAccountModal()">+ Add Account</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortTable('accounts', 'name')">Account Name</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('accounts', 'balance')">Balance (YTD)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <div id="categoriesTab" class="tab-content">
+            <section>
+                <div class="section-header">
+                    <h2 class="section-title">Category Spending</h2>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortTable('categories', 'name')">Category</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('categories', 'total')">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoriesBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <div id="transactionsTab" class="tab-content">
+            <section>
+                <div class="section-header">
+                    <h2 class="section-title">Transactions</h2>
+                    <div class="action-row">
+                        <button onclick="importCSV()" class="secondary">Import CSV</button>
+                        <button onclick="openTransactionModal()" class="secondary">+ Add Transaction</button>
+                        <button onclick="openTransferModal()" class="secondary">↔ Transfer</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                                <th class="sortable" onclick="sortTable('transactions', 'date')">Date</th>
+                                <th class="sortable" onclick="sortTable('transactions', 'month')">Month</th>
+                                <th class="sortable" onclick="sortTable('transactions', 'account')">Account</th>
+                                <th class="sortable" onclick="sortTable('transactions', 'description')">Description</th>
+                                <th class="sortable" onclick="sortTable('transactions', 'category')">Category</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('transactions', 'amount')">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsBody"></tbody>
+                    </table>
+                </div>
+                <div id="selectionBar" class="selection-bar" style="display: none;">
+                    <div class="selection-info">
+                        <strong><span id="selectionCount">0</span> selected</strong> | Total: <strong><span id="selectionSum">$0.00</span></strong>
+                    </div>
+                    <button onclick="confirmDeleteSelected()" class="danger">Delete Selected</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="accountModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="accountModalTitle">Add Account</h3>
+            </div>
+            <div class="modal-body">
+                <form id="accountForm">
+                    <input type="hidden" id="accountId">
+                    <div class="form-group">
+                        <label for="accountName">Account Name</label>
+                        <input type="text" id="accountName" placeholder="e.g., Checking Account" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accountBalance">Initial Balance</label>
+                        <input type="number" id="accountBalance" step="0.01" value="0.00" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left">
+                    <button id="deleteAccountBtn" onclick="confirmDeleteAccount()" class="danger" style="display: none;">Delete</button>
+                </div>
+                <div class="modal-footer-right">
+                    <button onclick="closeAccountModal()" class="secondary">Cancel</button>
+                    <button onclick="saveAccount()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="transactionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="transactionModalTitle">Add Transaction</h3>
+            </div>
+            <div class="modal-body">
+                <form id="transactionForm">
+                    <input type="hidden" id="transactionId">
+                    <div class="form-group">
+                        <label for="transactionDate">Date</label>
+                        <input type="date" id="transactionDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transactionMonth">Month</label>
+                        <select id="transactionMonth" required>
+                            <option value="">Select month...</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transactionAccount">Account</label>
+                        <select id="transactionAccount" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transactionAmount">Amount</label>
+                        <input type="number" id="transactionAmount" step="0.01" placeholder="Positive for income, negative for expense" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transactionDescription">Description</label>
+                        <input type="text" id="transactionDescription" placeholder="e.g., Grocery shopping" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transactionCategory">Category</label>
+                        <select id="transactionCategory" onchange="onCategorySelectChange()"></select>
+                    </div>
+                    <div class="form-group" id="newCategoryGroup" style="display: none;">
+                        <label for="newCategoryName">New Category Name</label>
+                        <input type="text" id="newCategoryName" placeholder="e.g., Food, Utilities, Income">
+                    </div>
+                    <div class="form-group" id="categoryColorGroup" style="display: none;">
+                        <label>Category Color</label>
+                        <div class="color-picker-group">
+                            <div class="color-presets">
+                                <button type="button" class="color-preset" style="background: #2D5F3F;" data-color="#2D5F3F"></button>
+                                <button type="button" class="color-preset" style="background: #3B82F6;" data-color="#3B82F6"></button>
+                                <button type="button" class="color-preset" style="background: #8B5CF6;" data-color="#8B5CF6"></button>
+                                <button type="button" class="color-preset" style="background: #EC4899;" data-color="#EC4899"></button>
+                                <button type="button" class="color-preset" style="background: #F59E0B;" data-color="#F59E0B"></button>
+                                <button type="button" class="color-preset" style="background: #EF4444;" data-color="#EF4444"></button>
+                            </div>
+                            <div class="color-hex-input">
+                                <input type="text" id="categoryColorHex" placeholder="#000000" maxlength="7">
+                                <div class="color-preview" id="colorPreview" style="background: #2D5F3F;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left">
+                    <button id="deleteTransactionBtn" onclick="confirmDeleteTransaction()" class="danger" style="display: none;">Delete</button>
+                </div>
+                <div class="modal-footer-right">
+                    <button onclick="closeTransactionModal()" class="secondary">Cancel</button>
+                    <button onclick="saveTransaction()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="transferModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Transfer Between Accounts</h3>
+            </div>
+            <div class="modal-body">
+                <form id="transferForm">
+                    <div class="form-group">
+                        <label for="transferDate">Date</label>
+                        <input type="date" id="transferDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferMonth">Month</label>
+                        <select id="transferMonth" required>
+                            <option value="">Select month...</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferFrom">From Account</label>
+                        <select id="transferFrom" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferTo">To Account</label>
+                        <select id="transferTo" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferAmount">Amount</label>
+                        <input type="number" id="transferAmount" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferDescription">Description</label>
+                        <input type="text" id="transferDescription" placeholder="e.g., Transfer to savings" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left"></div>
+                <div class="modal-footer-right">
+                    <button onclick="closeTransferModal()" class="secondary">Cancel</button>
+                    <button onclick="addTransfer()">Add Transfer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="confirmModalTitle">Confirm Action</h3>
+            </div>
+            <div class="modal-body" id="confirmModalBody"></div>
+            <div class="modal-footer">
+                <div class="modal-footer-left"></div>
+                <div class="modal-footer-right">
+                    <button onclick="closeConfirmModal()" class="secondary">Cancel</button>
+                    <button onclick="executeConfirmAction()" id="confirmActionBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ledgerData = { accounts: [], transactions: [], categories: {}, fileName: null };
+        let selectedMonth = null;
+        let selectedCategoryColor = '#2D5F3F';
+        let sortState = { table: null, column: null, direction: 'asc' };
+        let selectedTransactions = new Set();
+        let lastSelectedIndex = -1;
+        let pendingAction = null;
+
+        function init() {
+            setTodayDate();
+            populateMonthSelector();
+            setupColorPicker();
+            setupKeyboardShortcuts();
+            updateUI();
+        }
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('transactionDate').value = today;
+            document.getElementById('transferDate').value = today;
+            const currentMonth = new Date().getMonth() + 1;
+            document.getElementById('transactionMonth').value = currentMonth.toString();
+            document.getElementById('transferMonth').value = currentMonth.toString();
+        }
+
+        function populateMonthSelector() {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const select = document.getElementById('monthSelect');
+            select.innerHTML = '<option value="">All Months</option>';
+            months.forEach((month, i) => {
+                const opt = document.createElement('option');
+                opt.value = (i + 1).toString();
+                opt.textContent = month;
+                select.appendChild(opt);
+            });
+        }
+
+        function setupColorPicker() {
+            document.querySelectorAll('.color-preset').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    selectColor(btn.dataset.color);
+                });
+            });
+            document.getElementById('categoryColorHex').addEventListener('input', (e) => {
+                if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) selectColor(e.target.value);
+            });
+        }
+
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp' && e.shiftKey) {
+                    e.preventDefault();
+                    moveSelection(-1);
+                } else if (e.key === 'ArrowDown' && e.shiftKey) {
+                    e.preventDefault();
+                    moveSelection(1);
+                }
+            });
+        }
+
+        function moveSelection(direction) {
+            const rows = Array.from(document.querySelectorAll('#transactionsBody tr'));
+            if (rows.length === 0 || lastSelectedIndex === -1) return;
+            
+            const newIndex = Math.max(0, Math.min(rows.length - 1, lastSelectedIndex + direction));
+            const row = rows[newIndex];
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                checkbox.checked = true;
+                const transId = checkbox.dataset.id;
+                selectedTransactions.add(transId);
+                lastSelectedIndex = newIndex;
+                updateSelectionUI();
+            }
+        }
+
+        function selectColor(color) {
+            selectedCategoryColor = color;
+            document.getElementById('colorPreview').style.background = color;
+            document.getElementById('categoryColorHex').value = color;
+            document.querySelectorAll('.color-preset').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.color.toLowerCase() === color.toLowerCase());
+            });
+        }
+
+        function onCategorySelectChange() {
+            const val = document.getElementById('transactionCategory').value;
+            const show = val === '__new__';
+            document.getElementById('newCategoryGroup').style.display = show ? 'block' : 'none';
+            document.getElementById('categoryColorGroup').style.display = show ? 'block' : 'none';
+            if (show) setTimeout(() => document.getElementById('newCategoryName').focus(), 50);
+        }
+
+        function showMessage(msg, type = 'success') {
+            const div = document.createElement('div');
+            div.className = type === 'success' ? 'floating-message success' : 'floating-message error';
+            div.textContent = msg;
+            div.onclick = () => div.remove();
+            document.getElementById('messageContainer').appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(name + 'Tab').classList.add('active');
+        }
+
+        function onMonthChange() {
+            selectedMonth = document.getElementById('monthSelect').value ? parseInt(document.getElementById('monthSelect').value) : null;
+            updateUI();
+        }
+
+        function openFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            ledgerData = JSON.parse(event.target.result);
+                            ledgerData.fileName = file.name;
+                            if (!ledgerData.categories) ledgerData.categories = {};
+                            updateUI();
+                            showMessage('File loaded successfully!');
+                        } catch {
+                            showMessage('Error loading file: Invalid JSON format', 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        function saveFile() {
+            const dataStr = JSON.stringify(ledgerData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = ledgerData.fileName || 'budget-ledger.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            showMessage('File saved successfully!');
+        }
+
+        function importCSV() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            parseCSV(event.target.result);
+                        } catch (error) {
+                            showMessage('Error parsing CSV: ' + error.message, 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) {
+                showMessage('CSV file is empty or invalid', 'error');
+                return;
+            }
+
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const requiredFields = ['date', 'account', 'amount', 'description'];
+            const missing = requiredFields.filter(f => !header.includes(f));
+            
+            if (missing.length > 0) {
+                showMessage('CSV missing required columns: ' + missing.join(', '), 'error');
+                return;
+            }
+
+            const newTransactions = [];
+            const newAccounts = new Set();
+            const newCategories = new Set();
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                if (values.length < header.length) continue;
+
+                const row = {};
+                header.forEach((col, idx) => row[col] = values[idx]);
+
+                const account = row.account;
+                const category = row.category || '';
+                const month = row.month ? parseInt(row.month) : new Date(row.date).getMonth() + 1;
+
+                if (!ledgerData.accounts.find(a => a.name === account)) {
+                    newAccounts.add(account);
+                }
+
+                if (category && !ledgerData.categories[category]) {
+                    newCategories.add(category);
+                }
+
+                newTransactions.push({
+                    date: row.date,
+                    month: month,
+                    account: account,
+                    amount: parseFloat(row.amount),
+                    description: row.description,
+                    category: category
+                });
+            }
+
+            if (newAccounts.size > 0 || newCategories.size > 0) {
+                showImportConfirmModal(newTransactions, Array.from(newAccounts), Array.from(newCategories));
+            } else {
+                finishImport(newTransactions, [], []);
+            }
+        }
+
+        function showImportConfirmModal(transactions, accounts, categories) {
+            pendingAction = { type: 'import', transactions, accounts, categories };
+            
+            let html = '<p>The CSV contains the following new items:</p>';
+            
+            if (accounts.length > 0) {
+                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>';
+                accounts.forEach(a => html += `<li>${escapeHtml(a)}</li>`);
+                html += '</ul></div>';
+            }
+
+            if (categories.length > 0) {
+                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Categories:</div><ul>';
+                categories.forEach(c => html += `<li>${escapeHtml(c)}</li>`);
+                html += '</ul></div>';
+            }
+
+            html += `<p>Import ${transactions.length} transaction(s)?</p>`;
+
+            document.getElementById('confirmModalTitle').textContent = 'Confirm Import';
+            document.getElementById('confirmModalBody').innerHTML = html;
+            document.getElementById('confirmActionBtn').textContent = 'Confirm Import';
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function finishImport(transactions, accounts, categories) {
+            accounts.forEach(name => {
+                ledgerData.accounts.push({
+                    id: Date.now().toString() + Math.random(),
+                    name: name,
+                    initialBalance: 0
+                });
+            });
+
+            categories.forEach(name => {
+                ledgerData.categories[name] = { color: '#2D5F3F' };
+            });
+
+            transactions.forEach(t => {
+                const account = ledgerData.accounts.find(a => a.name === t.account);
+                if (account) {
+                    ledgerData.transactions.push({
+                        id: Date.now().toString() + Math.random(),
+                        date: t.date,
+                        month: t.month,
+                        accountId: account.id,
+                        amount: t.amount,
+                        description: t.description,
+                        category: t.category
+                    });
+                }
+            });
+
+            updateUI();
+            showMessage(`Imported ${transactions.length} transaction(s)`);
+        }
+
+        function confirmDeleteAccount() {
+            const id = document.getElementById('accountId').value;
+            if (!id) return;
+            
+            pendingAction = { type: 'deleteAccount', id };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Account';
+            document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this account? All associated transactions will also be deleted.</p>';
+            document.getElementById('confirmActionBtn').textContent = 'Delete Account';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function confirmDeleteTransaction() {
+            const id = document.getElementById('transactionId').value;
+            if (!id) return;
+            
+            pendingAction = { type: 'deleteTransaction', id };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Transaction';
+            document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this transaction?</p>';
+            document.getElementById('confirmActionBtn').textContent = 'Delete Transaction';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function confirmDeleteSelected() {
+            if (selectedTransactions.size === 0) return;
+            
+            pendingAction = { type: 'deleteSelected' };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Selected';
+            document.getElementById('confirmModalBody').innerHTML = `<p>Are you sure you want to delete ${selectedTransactions.size} selected transaction(s)?</p>`;
+            document.getElementById('confirmActionBtn').textContent = 'Delete Selected';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+            document.getElementById('confirmActionBtn').className = '';
+            pendingAction = null;
+        }
+
+        function executeConfirmAction() {
+            if (!pendingAction) return;
+
+            switch (pendingAction.type) {
+                case 'import':
+                    finishImport(pendingAction.transactions, pendingAction.accounts, pendingAction.categories);
+                    break;
+                case 'deleteAccount':
+                    ledgerData.accounts = ledgerData.accounts.filter(a => a.id !== pendingAction.id);
+                    ledgerData.transactions = ledgerData.transactions.filter(t => t.accountId !== pendingAction.id);
+                    updateUI();
+                    closeAccountModal();
+                    showMessage('Account deleted successfully!');
+                    break;
+                case 'deleteTransaction':
+                    ledgerData.transactions = ledgerData.transactions.filter(t => t.id !== pendingAction.id);
+                    updateUI();
+                    closeTransactionModal();
+                    showMessage('Transaction deleted successfully!');
+                    break;
+                case 'deleteSelected':
+                    ledgerData.transactions = ledgerData.transactions.filter(t => !selectedTransactions.has(t.id));
+                    selectedTransactions.clear();
+                    lastSelectedIndex = -1;
+                    updateUI();
+                    showMessage('Selected transactions deleted successfully!');
+                    break;
+            }
+
+            closeConfirmModal();
+        }
+
+        function openAccountModal(accountId = null) {
+            if (accountId) {
+                const account = ledgerData.accounts.find(a => a.id === accountId);
+                if (account) {
+                    document.getElementById('accountModalTitle').textContent = 'Edit Account';
+                    document.getElementById('accountId').value = account.id;
+                    document.getElementById('accountName').value = account.name;
+                    document.getElementById('accountBalance').value = account.initialBalance || 0;
+                    document.getElementById('deleteAccountBtn').style.display = 'block';
+                }
+            } else {
+                document.getElementById('accountModalTitle').textContent = 'Add Account';
+                document.getElementById('accountId').value = '';
+                document.getElementById('accountName').value = '';
+                document.getElementById('accountBalance').value = '0.00';
+                document.getElementById('deleteAccountBtn').style.display = 'none';
+            }
+            document.getElementById('accountModal').classList.add('active');
+            setTimeout(() => document.getElementById('accountName').focus(), 100);
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').classList.remove('active');
+        }
+
+        function saveAccount() {
+            const id = document.getElementById('accountId').value;
+            const name = document.getElementById('accountName').value.trim();
+            const balance = parseFloat(document.getElementById('accountBalance').value);
+            
+            if (!name) return showMessage('Please enter an account name', 'error');
+
+            if (id) {
+                const account = ledgerData.accounts.find(a => a.id === id);
+                if (account) {
+                    account.name = name;
+                    account.initialBalance = balance;
+                }
+            } else {
+                ledgerData.accounts.push({ id: Date.now().toString(), name, initialBalance: balance });
+            }
+
+            updateUI();
+            closeAccountModal();
+            showMessage(id ? 'Account updated successfully!' : 'Account added successfully!');
+        }
+
+        function openTransactionModal(transactionId = null) {
+            if (ledgerData.accounts.length === 0) return showMessage('Please add an account first', 'error');
+            
+            if (transactionId) {
+                const transaction = ledgerData.transactions.find(t => t.id === transactionId);
+                if (transaction) {
+                    document.getElementById('transactionModalTitle').textContent = 'Edit Transaction';
+                    document.getElementById('transactionId').value = transaction.id;
+                    document.getElementById('transactionDate').value = transaction.date;
+                    document.getElementById('transactionMonth').value = transaction.month;
+                    document.getElementById('transactionAmount').value = transaction.amount;
+                    document.getElementById('transactionDescription').value = transaction.description;
+                    document.getElementById('deleteTransactionBtn').style.display = 'block';
+                    
+                    populateAccountSelects();
+                    document.getElementById('transactionAccount').value = transaction.accountId;
+                    
+                    populateCategorySelect();
+                    document.getElementById('transactionCategory').value = transaction.category || '';
+                }
+            } else {
+                document.getElementById('transactionModalTitle').textContent = 'Add Transaction';
+                document.getElementById('transactionId').value = '';
+                document.getElementById('transactionForm').reset();
+                setTodayDate();
+                document.getElementById('deleteTransactionBtn').style.display = 'none';
+                populateAccountSelects();
+                populateCategorySelect();
+            }
+
+            document.getElementById('transactionModal').classList.add('active');
+            document.getElementById('newCategoryGroup').style.display = 'none';
+            document.getElementById('categoryColorGroup').style.display = 'none';
+            setTimeout(() => document.getElementById('transactionDate').focus(), 100);
+        }
+
+        function closeTransactionModal() {
+            document.getElementById('transactionModal').classList.remove('active');
+        }
+
+        function populateCategorySelect() {
+            const select = document.getElementById('transactionCategory');
+            const cats = Object.keys(ledgerData.categories || {}).sort();
+            select.innerHTML = '<option value="">Select or create category...</option>';
+            cats.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                select.appendChild(opt);
+            });
+            const newOpt = document.createElement('option');
+            newOpt.value = '__new__';
+            newOpt.textContent = '+ Create New Category';
+            select.appendChild(newOpt);
+        }
+
+        function saveTransaction() {
+            const id = document.getElementById('transactionId').value;
+            const date = document.getElementById('transactionDate').value;
+            const month = parseInt(document.getElementById('transactionMonth').value);
+            const accountId = document.getElementById('transactionAccount').value;
+            const amount = parseFloat(document.getElementById('transactionAmount').value);
+            const description = document.getElementById('transactionDescription').value.trim();
+            let category = document.getElementById('transactionCategory').value;
+
+            if (category === '__new__') {
+                const newName = document.getElementById('newCategoryName').value.trim();
+                if (!newName) return showMessage('Please enter a category name', 'error');
+                category = newName;
+                ledgerData.categories[category] = { color: selectedCategoryColor };
+            }
+
+            if (!date || !month || !accountId || !description) return showMessage('Please fill in all required fields', 'error');
+
+            if (id) {
+                const transaction = ledgerData.transactions.find(t => t.id === id);
+                if (transaction) {
+                    transaction.date = date;
+                    transaction.month = month;
+                    transaction.accountId = accountId;
+                    transaction.amount = amount;
+                    transaction.description = description;
+                    transaction.category = category;
+                }
+            } else {
+                ledgerData.transactions.push({ id: Date.now().toString(), date, month, accountId, amount, description, category });
+            }
+
+            updateUI();
+            closeTransactionModal();
+            showMessage(id ? 'Transaction updated successfully!' : 'Transaction added successfully!');
+        }
+
+        function openTransferModal() {
+            if (ledgerData.accounts.length < 2) return showMessage('Please add at least two accounts first', 'error');
+            document.getElementById('transferModal').classList.add('active');
+            populateTransferSelects();
+            setTimeout(() => document.getElementById('transferDate').focus(), 100);
+        }
+
+        function closeTransferModal() {
+            document.getElementById('transferModal').classList.remove('active');
+        }
+
+        function addTransfer() {
+            const date = document.getElementById('transferDate').value;
+            const month = parseInt(document.getElementById('transferMonth').value);
+            const fromId = document.getElementById('transferFrom').value;
+            const toId = document.getElementById('transferTo').value;
+            const amount = parseFloat(document.getElementById('transferAmount').value);
+            const description = document.getElementById('transferDescription').value.trim();
+
+            if (!date || !month || !fromId || !toId || !description || amount <= 0) return showMessage('Please fill in all fields correctly', 'error');
+            if (fromId === toId) return showMessage('Source and destination accounts must be different', 'error');
+
+            const ts = Date.now().toString();
+            ledgerData.transactions.push({ id: ts + '-from', date, month, accountId: fromId, amount: -amount, description: description + ' (Transfer Out)', category: 'Transfer' });
+            ledgerData.transactions.push({ id: ts + '-to', date, month, accountId: toId, amount: amount, description: description + ' (Transfer In)', category: 'Transfer' });
+
+            updateUI();
+            closeTransferModal();
+            document.getElementById('transferForm').reset();
+            setTodayDate();
+            showMessage('Transfer added successfully!');
+        }
+
+        function toggleSelectAll() {
+            const checked = document.getElementById('selectAll').checked;
+            document.querySelectorAll('#transactionsBody input[type="checkbox"]').forEach(cb => {
+                cb.checked = checked;
+                if (checked) {
+                    selectedTransactions.add(cb.dataset.id);
+                } else {
+                    selectedTransactions.delete(cb.dataset.id);
+                }
+            });
+            updateSelectionUI();
+        }
+
+        function toggleTransaction(id, index, event) {
+            if (event.target.type === 'checkbox') {
+                if (event.target.checked) {
+                    selectedTransactions.add(id);
+                } else {
+                    selectedTransactions.delete(id);
+                }
+                lastSelectedIndex = index;
+                updateSelectionUI();
+                return;
+            }
+
+            // Clicked on row - open edit modal
+            openTransactionModal(id);
+        }
+
+        function handleTransactionClick(id, index, event) {
+            // Stop propagation for checkbox clicks
+            if (event.target.type === 'checkbox') {
+                event.stopPropagation();
+                const checkbox = event.target;
+                
+                if (event.shiftKey && lastSelectedIndex !== -1 && lastSelectedIndex !== index) {
+                    const start = Math.min(lastSelectedIndex, index);
+                    const end = Math.max(lastSelectedIndex, index);
+                    const rows = document.querySelectorAll('#transactionsBody tr');
+                    for (let i = start; i <= end; i++) {
+                        const cb = rows[i].querySelector('input[type="checkbox"]');
+                        if (cb) {
+                            cb.checked = true;
+                            selectedTransactions.add(cb.dataset.id);
+                        }
+                    }
+                } else {
+                    if (checkbox.checked) {
+                        selectedTransactions.add(id);
+                    } else {
+                        selectedTransactions.delete(id);
+                    }
+                }
+                
+                lastSelectedIndex = index;
+                updateSelectionUI();
+                return;
+            }
+
+            // Clicked on row - open edit modal
+            openTransactionModal(id);
+        }
+
+        function updateSelectionUI() {
+            const count = selectedTransactions.size;
+            
+            if (count > 0) {
+                const sum = Array.from(selectedTransactions).reduce((total, id) => {
+                    const t = ledgerData.transactions.find(x => x.id === id);
+                    return total + (t ? t.amount : 0);
+                }, 0);
+                
+                document.getElementById('selectionCount').textContent = count;
+                document.getElementById('selectionSum').textContent = formatCurrency(sum);
+                document.getElementById('selectionBar').style.display = 'flex';
+            } else {
+                document.getElementById('selectionBar').style.display = 'none';
+            }
+
+            document.querySelectorAll('#transactionsBody tr').forEach(row => {
+                const cb = row.querySelector('input[type="checkbox"]');
+                row.classList.toggle('selected', cb && cb.checked);
+            });
+
+            // Update select all checkbox
+            const allCheckboxes = document.querySelectorAll('#transactionsBody input[type="checkbox"]');
+            const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
+            document.getElementById('selectAll').checked = allChecked;
+        }
+
+        function sortTable(table, column) {
+            if (sortState.table === table && sortState.column === column) {
+                sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortState.table = table;
+                sortState.column = column;
+                sortState.direction = 'asc';
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            updateFileName();
+            updateSummary();
+            updateAccountsTable();
+            updateTransactionsTable();
+            updateCategoriesTable();
+        }
+
+        function updateFileName() {
+            document.getElementById('fileName').textContent = ledgerData.fileName || 'No file loaded';
+        }
+
+        function getFilteredTransactions() {
+            return selectedMonth === null ? ledgerData.transactions : ledgerData.transactions.filter(t => t.month === selectedMonth);
+        }
+
+        function getYTDTransactions() {
+            return selectedMonth === null ? ledgerData.transactions : ledgerData.transactions.filter(t => t.month <= selectedMonth);
+        }
+
+        function calculateAccountBalances(transactions) {
+            const balances = {};
+            ledgerData.accounts.forEach(a => balances[a.id] = a.initialBalance || 0);
+            transactions.forEach(t => { if (balances[t.accountId] !== undefined) balances[t.accountId] += t.amount; });
+            return balances;
+        }
+
+        function updateSummary() {
+            const ytdTrans = getYTDTransactions();
+            const prevTrans = selectedMonth ? ledgerData.transactions.filter(t => t.month < selectedMonth) : [];
+            const ytdBal = calculateAccountBalances(ytdTrans);
+            const prevBal = calculateAccountBalances(prevTrans);
+
+            let ytdA = 0, ytdL = 0, prevA = 0, prevL = 0;
+            ledgerData.accounts.forEach(a => {
+                const yb = ytdBal[a.id] || 0, pb = prevBal[a.id] || 0;
+                if (yb >= 0) ytdA += yb; else ytdL += Math.abs(yb);
+                if (pb >= 0) prevA += pb; else prevL += Math.abs(pb);
+            });
+
+            const ytdNW = ytdA - ytdL, prevNW = prevA - prevL;
+            const deltaA = ytdA - prevA, deltaL = ytdL - prevL, deltaNW = ytdNW - prevNW;
+
+            document.getElementById('netWorthYTD').textContent = formatCurrency(ytdNW);
+            document.getElementById('netWorthYTD').className = ytdNW >= 0 ? 'summary-value positive' : 'summary-value negative';
+            document.getElementById('netWorthDelta').textContent = formatCurrency(Math.abs(deltaNW));
+            document.getElementById('netWorthDelta').className = deltaNW >= 0 ? 'summary-delta positive' : 'summary-delta negative';
+
+            document.getElementById('totalAssetsYTD').textContent = formatCurrency(ytdA);
+            document.getElementById('totalAssetsDelta').textContent = formatCurrency(Math.abs(deltaA));
+            document.getElementById('totalAssetsDelta').className = deltaA >= 0 ? 'summary-delta positive' : 'summary-delta negative';
+
+            document.getElementById('totalLiabilitiesYTD').textContent = formatCurrency(ytdL);
+            document.getElementById('totalLiabilitiesDelta').textContent = formatCurrency(Math.abs(deltaL));
+            document.getElementById('totalLiabilitiesDelta').className = deltaL >= 0 ? 'summary-delta negative' : 'summary-delta positive';
+        }
+
+        function updateAccountsTable() {
+            const tbody = document.getElementById('accountsBody');
+            if (ledgerData.accounts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-title">No accounts yet</div><p>Add your first account to start tracking</p></div></td></tr>';
+                return;
+            }
+            
+            const bal = calculateAccountBalances(getYTDTransactions());
+            let accounts = ledgerData.accounts.map(a => ({ ...a, balance: bal[a.id] || 0 }));
+
+            if (sortState.table === 'accounts') {
+                accounts.sort((a, b) => {
+                    let valA = sortState.column === 'name' ? a.name : a.balance;
+                    let valB = sortState.column === 'name' ? b.name : b.balance;
+                    if (typeof valA === 'string') valA = valA.toLowerCase();
+                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+                });
+            }
+
+            tbody.innerHTML = accounts.map(a => 
+                `<tr onclick="openAccountModal('${a.id}')"><td>${escapeHtml(a.name)}</td><td class="amount ${a.balance >= 0 ? 'positive' : 'negative'}">${formatCurrency(a.balance)}</td></tr>`
+            ).join('');
+        }
+
+        function updateTransactionsTable() {
+            const tbody = document.getElementById('transactionsBody');
+            const filt = getFilteredTransactions();
+            
+            if (filt.length === 0) {
+                const msg = selectedMonth ? 'No transactions for this month' : 'No transactions yet';
+                const desc = selectedMonth ? 'Add transactions or select a different month' : 'Add your first transaction to start tracking';
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">💸</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                selectedTransactions.clear();
+                updateSelectionUI();
+                return;
+            }
+
+            let sorted = [...filt];
+            if (sortState.table === 'transactions') {
+                sorted.sort((a, b) => {
+                    let valA, valB;
+                    switch(sortState.column) {
+                        case 'date': valA = a.date; valB = b.date; break;
+                        case 'month': valA = a.month; valB = b.month; break;
+                        case 'account': 
+                            const accA = ledgerData.accounts.find(x => x.id === a.accountId);
+                            const accB = ledgerData.accounts.find(x => x.id === b.accountId);
+                            valA = accA ? accA.name.toLowerCase() : '';
+                            valB = accB ? accB.name.toLowerCase() : '';
+                            break;
+                        case 'description': valA = a.description.toLowerCase(); valB = b.description.toLowerCase(); break;
+                        case 'category': valA = (a.category || '').toLowerCase(); valB = (b.category || '').toLowerCase(); break;
+                        case 'amount': valA = a.amount; valB = b.amount; break;
+                        default: valA = a.date; valB = b.date;
+                    }
+                    return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+                });
+            } else {
+                sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+            }
+
+            tbody.innerHTML = sorted.map((t, idx) => {
+                const a = ledgerData.accounts.find(x => x.id === t.accountId);
+                const color = t.category && ledgerData.categories[t.category] ? ledgerData.categories[t.category].color : '#2D5F3F';
+                const checked = selectedTransactions.has(t.id) ? 'checked' : '';
+                return `<tr onclick="handleTransactionClick('${t.id}', ${idx}, event)">
+                    <td><input type="checkbox" ${checked} data-id="${t.id}"></td>
+                    <td class="date">${formatDate(t.date)}</td>
+                    <td>${getMonthName(t.month)}</td>
+                    <td>${a ? escapeHtml(a.name) : 'Unknown'}</td>
+                    <td>${escapeHtml(t.description)}</td>
+                    <td>${t.category ? `<span class="category-tag" style="background-color:${color}20;color:${color};">${escapeHtml(t.category)}</span>` : '—'}</td>
+                    <td class="amount ${t.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(t.amount)}</td>
+                </tr>`;
+            }).join('');
+
+            updateSelectionUI();
+        }
+
+        function updateCategoriesTable() {
+            const tbody = document.getElementById('categoriesBody');
+            const filt = getFilteredTransactions();
+            const totals = {};
+            filt.forEach(t => { if (t.category && t.category !== 'Transfer') totals[t.category] = (totals[t.category] || 0) + t.amount; });
+            
+            let cats = Object.entries(totals);
+
+            if (sortState.table === 'categories') {
+                cats.sort((a, b) => {
+                    let valA = sortState.column === 'name' ? a[0].toLowerCase() : a[1];
+                    let valB = sortState.column === 'name' ? b[0].toLowerCase() : b[1];
+                    return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+                });
+            } else {
+                cats.sort((a, b) => a[1] - b[1]);
+            }
+
+            if (cats.length === 0) {
+                const msg = selectedMonth ? 'No category data for this month' : 'No category data';
+                const desc = selectedMonth ? 'Add transactions or select a different month' : 'Categories will appear once you add transactions';
+                tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = cats.map(([cat, tot]) => {
+                const color = ledgerData.categories[cat] ? ledgerData.categories[cat].color : '#2D5F3F';
+                return `<tr style="cursor: default;"><td><span class="category-tag" style="background-color:${color}20;color:${color};">${escapeHtml(cat)}</span></td><td class="amount ${tot >= 0 ? 'positive' : 'negative'}">${formatCurrency(tot)}</td></tr>`;
+            }).join('');
+        }
+
+        function populateAccountSelects() {
+            document.getElementById('transactionAccount').innerHTML = '<option value="">Select account...</option>' + ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+        }
+
+        function populateTransferSelects() {
+            const opts = ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+            document.getElementById('transferFrom').innerHTML = '<option value="">Select account...</option>' + opts;
+            document.getElementById('transferTo').innerHTML = '<option value="">Select account...</option>' + opts;
+        }
+
+        function getMonthName(m) {
+            return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1] || '';
+        }
+
+        function formatCurrency(amt) {
+            const abs = Math.abs(amt);
+            const fmt = abs.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return amt < 0 ? '-' + fmt : fmt;
+        }
+
+        function formatDate(d) {
+            return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.querySelectorAll('.modal').forEach(m => {
+            m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('active'); });
+        });
+
+        init();
+    </script>
+</body>
+</html>
