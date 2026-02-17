@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://accounts.google.com/gsi/client"></script>
     <style>
         :root {
             --color-paper: #FDFDF8;
@@ -1091,14 +1092,15 @@
             </div>
             <div class="modal-body">
                 <div class="drive-setup-note" id="driveSetupNote" style="display:none;">
-                    ⚠️ <strong>Google OAuth requires an HTTP server</strong> — it does not work over <code>file://</code>.
+                    ⚠️ <strong>Google OAuth setup required</strong>
                     <br><br>
-                    Serve this file locally:<br>
-                    <code>python3 -m http.server 8080</code><br>
-                    then open <code>http://localhost:8080</code>
-                    <br><br>
-                    Also add <code>http://localhost:8080</code> to your OAuth client's
-                    <strong>Authorized JavaScript origins</strong> in Google Cloud Console.
+                    1. Add your page URL to <strong>Authorized JavaScript origins</strong> in Google Cloud Console:<br>
+                    <code>https://yourusername.github.io</code> (for GitHub Pages)<br>
+                    <code>http://localhost:8080</code> (for local testing)<br>
+                    <br>
+                    2. Enable <strong>Google Drive API</strong> in your Google Cloud project.<br>
+                    <br>
+                    3. If still failing, check browser console for errors.
                 </div>
                 <div id="driveOpenContent">
                     <p style="color: var(--color-ink-muted); margin-bottom: 1rem; font-size: 0.875rem;">Files in <strong>/Accountable</strong> on Google Drive:</p>
@@ -1168,28 +1170,83 @@
         // workaround: only call requestAccessToken inside a user-gesture handler).
 
         function driveInit() {
-            const origin = window.location.protocol;
-            if (origin === 'file:') {
-                updateDriveStatus(false, 'Needs HTTP server');
-                console.warn('[Drive] Google OAuth does not work over file://. Serve with: python3 -m http.server 8080');
+            console.log('[Drive] driveInit() called, protocol:', window.location.protocol);
+            if (window.location.protocol === 'file:') {
+                updateDriveStatus(false, 'Needs HTTP/HTTPS');
+                console.warn('[Drive] Google OAuth does not work over file://. Use http:// or https://');
                 return;
             }
             if (!GOOGLE_CLIENT_ID) {
                 updateDriveStatus(false, 'No Client ID');
+                console.warn('[Drive] GOOGLE_CLIENT_ID is not set');
                 return;
             }
-            waitForGIS(driveCreateTokenClient);
+            
+            // Check if script tag exists
+            const existingScript = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+            if (!existingScript) {
+                console.warn('[Drive] GIS script tag not found in DOM — injecting dynamically');
+                injectGISScript(() => waitForGIS(driveCreateTokenClient));
+            } else {
+                console.log('[Drive] GIS script tag found, waiting for library to load...');
+                waitForGIS(driveCreateTokenClient);
+            }
         }
 
         function waitForGIS(cb, attempts = 0) {
             if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+                console.log('[Drive] GIS library loaded successfully');
                 cb();
-            } else if (attempts < 40) {           // wait up to 4 s
+            } else if (attempts < 50) {           // wait up to 5 s
+                if (attempts === 0) {
+                    console.log('[Drive] Waiting for GIS... (attempt', attempts + 1, ')');
+                }
                 setTimeout(() => waitForGIS(cb, attempts + 1), 100);
             } else {
-                updateDriveStatus(false, 'GIS failed to load');
-                console.error('[Drive] google.accounts.oauth2 never became available.');
+                console.error('[Drive] GIS library failed to load after 5s — trying dynamic injection');
+                updateDriveStatus(false, 'Loading GIS…');
+                injectGISScript(cb);
             }
+        }
+
+        function injectGISScript(cb) {
+            // Dynamically inject the GIS script
+            const existing = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+            if (existing) {
+                console.log('[Drive] GIS script already exists in DOM, just waiting...');
+                waitForGIS(cb, 0);
+                return;
+            }
+            console.log('[Drive] Injecting GIS script dynamically...');
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.defer = true;
+            script.onload = () => {
+                console.log('[Drive] GIS script loaded via dynamic injection');
+                waitForGIS(cb, 0);
+            };
+            script.onerror = (err) => {
+                console.error('[Drive] Failed to load GIS script — network blocked, CSP, or CORS issue', err);
+                updateDriveStatus(false, 'GIS blocked');
+                showMessage('Could not load Google Sign-In library. Check console for errors.', 'error');
+            };
+            document.head.appendChild(script);
+        }
+
+        function injectGISScript(cb) {
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.onload = () => {
+                console.log('[Drive] GIS loaded via dynamic injection');
+                waitForGIS(cb, 0);
+            };
+            script.onerror = () => {
+                console.error('[Drive] Failed to load GIS library (network or CSP block)');
+                updateDriveStatus(false, 'GIS load failed');
+                showMessage('Could not load Google Identity Services. Check network/CSP.', 'error');
+            };
+            document.head.appendChild(script);
         }
 
         function driveCreateTokenClient() {
@@ -1547,13 +1604,7 @@
             setupColorPicker();
             setupKeyboardShortcuts();
             updateUI();
-            // Init Google Drive after GIS script loads
-            if (typeof google !== 'undefined' && google.accounts) {
-                driveInit();
-            } else {
-                const gsiScript = document.querySelector('script[src*="gsi/client"]');
-                if (gsiScript) gsiScript.addEventListener('load', driveInit);
-            }
+            driveInit();
         }
 
         function setTodayDate() {
