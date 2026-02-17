@@ -22,7 +22,6 @@ let gPendingAction = null;         // function to run after auth succeeds
 // workaround: only call requestAccessToken inside a user-gesture handler).
 
 function driveInit() {
-    console.log('[Drive] driveInit() called, protocol:', window.location.protocol);
     if (window.location.protocol === 'file:') {
         updateDriveStatus(false, 'Needs HTTP/HTTPS');
         console.warn('[Drive] Google OAuth does not work over file://. Use http:// or https://');
@@ -40,19 +39,14 @@ function driveInit() {
         console.warn('[Drive] GIS script tag not found in DOM — injecting dynamically');
         injectGISScript(() => waitForGIS(driveCreateTokenClient));
     } else {
-        console.log('[Drive] GIS script tag found, waiting for library to load...');
         waitForGIS(driveCreateTokenClient);
     }
 }
 
 function waitForGIS(cb, attempts = 0) {
     if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
-        console.log('[Drive] GIS library loaded successfully');
         cb();
     } else if (attempts < 50) {           // wait up to 5 s
-        if (attempts === 0) {
-            console.log('[Drive] Waiting for GIS... (attempt', attempts + 1, ')');
-        }
         setTimeout(() => waitForGIS(cb, attempts + 1), 100);
     } else {
         console.error('[Drive] GIS library failed to load after 5s — trying dynamic injection');
@@ -65,17 +59,14 @@ function injectGISScript_2(cb) {
     // Dynamically inject the GIS script
     const existing = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
     if (existing) {
-        console.log('[Drive] GIS script already exists in DOM, just waiting...');
         waitForGIS(cb, 0);
         return;
     }
-    console.log('[Drive] Injecting GIS script dynamically...');
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
     script.onload = () => {
-        console.log('[Drive] GIS script loaded via dynamic injection');
         waitForGIS(cb, 0);
     };
     script.onerror = (err) => {
@@ -90,7 +81,6 @@ function injectGISScript(cb) {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.onload = () => {
-        console.log('[Drive] GIS loaded via dynamic injection');
         waitForGIS(cb, 0);
     };
     script.onerror = () => {
@@ -116,7 +106,6 @@ function driveCreateTokenClient() {
         });
         gDriveReady = true;
         updateDriveStatus(false, 'Drive');          // ready but not yet authed
-        console.log('[Drive] token client created, ready.');
         driveAutoLoad();                            // attempt silent load
     } catch (e) {
         updateDriveStatus(false, 'Init failed');
@@ -127,7 +116,6 @@ function driveCreateTokenClient() {
 // ─── Token lifecycle ─────────────────────────────────────────────────────────
 
 function handleTokenResponse(resp) {
-    console.log('[Drive] token response', resp);
     if (resp.error) {
         updateDriveStatus(false, 'Auth failed');
         showMessage('Google Drive: ' + resp.error, 'error');
@@ -136,7 +124,6 @@ function handleTokenResponse(resp) {
     }
     gAccessToken = resp.access_token;
     updateDriveStatus(true, 'Connected');
-    console.log('[Drive] authenticated, token received.');
 
     if (gPendingAction) {
         const action = gPendingAction;
@@ -158,7 +145,6 @@ function withDriveAuth(fn) {
         return;
     }
     gPendingAction = fn;
-    console.log('[Drive] requesting access token (popup)…');
     gTokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
@@ -168,19 +154,16 @@ function withDriveAuth(fn) {
 
 function driveAutoLoad() {
     if (!gDriveReady) return;
-    console.log('[Drive] attempting silent token for auto-load…');
     const silentClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: DRIVE_SCOPE,
         prompt: '',
         callback: async (resp) => {
             if (resp.error) {
-                console.log('[Drive] silent auth skipped:', resp.error);
                 return;           // user hasn't consented yet — that's fine
             }
             gAccessToken = resp.access_token;
             updateDriveStatus(true, 'Connected');
-            console.log('[Drive] silent auth OK — trying to auto-load data.json');
             try {
                 await ensureFolder();
                 const files = await listJsonFiles();
@@ -195,7 +178,7 @@ function driveAutoLoad() {
             }
         }
     });
-    silentClient.requestAccessToken({ prompt: '' });
+    silentClient.requestAccessToken({ prompt: 'none' });
 }
 
 // ─── Drive status indicator ──────────────────────────────────────────────────
@@ -228,7 +211,6 @@ async function ensureFolder() {
     const data = await driveGet(`${DRIVE_API}/files?q=${q}&fields=files(id,name)`);
     if (data.files && data.files.length > 0) {
         gDriveFolderId = data.files[0].id;
-        console.log('[Drive] found folder id', gDriveFolderId);
         return gDriveFolderId;
     }
     // Create the folder
@@ -240,7 +222,6 @@ async function ensureFolder() {
     const folder = await res.json();
     if (folder.error) throw new Error(folder.error.message);
     gDriveFolderId = folder.id;
-    console.log('[Drive] created folder id', gDriveFolderId);
     return gDriveFolderId;
 }
 
