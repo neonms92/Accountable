@@ -115,6 +115,31 @@
             </section>
         </div>
 
+        <div id="statementsTab" class="tab-content">
+            <section>
+                <div class="section-header">
+                    <h2 class="section-title">Statements</h2>
+                    <button onclick="openStatementModal()">+ Add Statement</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Account</th>
+                                <th style="text-align: right;">Starting Balance</th>
+                                <th style="text-align: right;">Ending Balance</th>
+                                <th style="text-align: right;">Total Deposits</th>
+                                <th style="text-align: right;">Total Withdrawals</th>
+                                <th>Period</th>
+                                <th style="text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statementsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
         <div id="envelopesTab" class="tab-content">
             <section>
                 <div class="section-header">
@@ -360,6 +385,81 @@
         </div>
     </div>
 
+    <div id="statementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="statementModalTitle">Add Statement</h3>
+            </div>
+            <div class="modal-body">
+                <form id="statementForm">
+                    <input type="hidden" id="statementId">
+                    <div class="form-group">
+                        <label for="statementAccount">Account</label>
+                        <select id="statementAccount" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="statementMonth">Month</label>
+                        <select id="statementMonth" required>
+                            <option value="">Select month...</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="statementStartDate">Start Date</label>
+                            <input type="date" id="statementStartDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="statementEndDate">End Date</label>
+                            <input type="date" id="statementEndDate" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="statementStartBalance">Starting Balance</label>
+                            <input type="number" id="statementStartBalance" step="0.01" placeholder="0.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="statementEndBalance">Ending Balance</label>
+                            <input type="number" id="statementEndBalance" step="0.01" placeholder="0.00" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="statementDeposits">Total Deposits</label>
+                            <input type="number" id="statementDeposits" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="statementWithdrawals">Total Withdrawals</label>
+                            <input type="number" id="statementWithdrawals" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                    </div>
+                    <div id="statementSanityCheck" class="statement-sanity" style="display:none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left">
+                    <button id="deleteStatementBtn" onclick="confirmDeleteStatement()" class="danger" style="display:none;">Delete</button>
+                </div>
+                <div class="modal-footer-right">
+                    <button onclick="closeStatementModal()" class="secondary">Cancel</button>
+                    <button onclick="saveStatement()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="confirmModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -439,7 +539,7 @@
     <script src="gdrive.js"></script>
     <script>
         // ─── Application State ───────────────────────────────────────────────────────
-        let ledgerData = { accounts: [], transactions: [], envelopes: {}, fileName: null };
+        let ledgerData = { accounts: [], transactions: [], envelopes: {}, statements: [], fileName: null };
         let selectedMonth = null;
         let selectedEnvelopeColor = '#2D5F3F';
         let sortState = { table: null, column: null, direction: 'asc' };
@@ -568,6 +668,7 @@
                             ledgerData = JSON.parse(event.target.result);
                             ledgerData.fileName = file.name;
                             if (!ledgerData.envelopes) ledgerData.envelopes = {};
+                            if (!ledgerData.statements) ledgerData.statements = [];
                             updateUI();
                             showMessage('File loaded successfully!');
                         } catch {
@@ -818,6 +919,13 @@
                     markUnsaved();
                     updateUI();
                     showMessage('Selected transactions deleted successfully!');
+                    break;
+                case 'deleteStatement':
+                    ledgerData.statements = (ledgerData.statements || []).filter(s => s.id !== pendingAction.id);
+                    markUnsaved();
+                    updateUI();
+                    closeStatementModal();
+                    showMessage('Statement deleted successfully!');
                     break;
             }
 
@@ -1112,8 +1220,10 @@
             updateFileName();
             updateSummary();
             updateAccountsTable();
+            updateStatementsTab();
             updateTransactionsTable();
             updateEnvelopesTable();
+            updateTabIncompleteIndicators();
         }
 
         function updateFileName() {
@@ -1260,17 +1370,17 @@
                     return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
                 });
             } else {
-                cats.sort((a, b) => a[1] - b[1]);
+                envs.sort((a, b) => a[1] - b[1]);
             }
 
-            if (cats.length === 0) {
+            if (envs.length === 0) {
                 const msg = selectedMonth ? 'No envelope data for this month' : 'No envelope data';
                 const desc = selectedMonth ? 'Add transactions or select a different month' : 'Envelopes will appear once you add transactions';
                 tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = cats.map(([cat, tot]) => {
+            tbody.innerHTML = envs.map(([cat, tot]) => {
                 const color = ledgerData.envelopes[cat] ? ledgerData.envelopes[cat].color : '#2D5F3F';
                 return `<tr style="cursor: default;"><td><span class="envelope-tag" style="background-color:${color}20;color:${color};">${escapeHtml(cat)}</span></td><td class="amount ${tot >= 0 ? 'positive' : 'negative'}">${formatCurrency(tot)}</td></tr>`;
             }).join('');
@@ -1304,6 +1414,176 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // ─── Statements ──────────────────────────────────────────────────────────────
+
+        function getStatementKey(accountId, month) {
+            return `${accountId}::${month}`;
+        }
+
+        function isStatementsComplete(month) {
+            if (!month) return true;
+            const accountIds = ledgerData.accounts.map(a => a.id);
+            if (accountIds.length === 0) return true;
+            return accountIds.every(id => {
+                return (ledgerData.statements || []).some(s => s.accountId === id && s.month === month);
+            });
+        }
+
+        function updateTabIncompleteIndicators() {
+            const statementsBtn = document.querySelector('.tab[onclick="switchTab(\'statements\')"]');
+            if (statementsBtn) {
+                const month = selectedMonth;
+                const incomplete = month && ledgerData.accounts.length > 0 && !isStatementsComplete(month);
+                statementsBtn.classList.toggle('tab-incomplete', !!incomplete);
+            }
+        }
+
+        function updateStatementsTab() {
+            const tbody = document.getElementById('statementsBody');
+            if (!tbody) return;
+
+            const stmts = selectedMonth
+                ? (ledgerData.statements || []).filter(s => s.month === selectedMonth)
+                : (ledgerData.statements || []);
+
+            if (stmts.length === 0) {
+                const msg = selectedMonth ? 'No statements for this month' : 'No statements yet';
+                const desc = selectedMonth ? 'Add a statement for each account to mark the month complete' : 'Add your first statement to start tracking';
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🧾</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = stmts.map(s => {
+                const account = ledgerData.accounts.find(a => a.id === s.accountId);
+                const accountName = account ? escapeHtml(account.name) : 'Unknown';
+                const expected = s.startBalance + s.deposits - s.withdrawals;
+                const diff = Math.abs(expected - s.endBalance);
+                const ok = diff < 0.005;
+                const statusHtml = ok
+                    ? `<span class="stmt-status ok" title="Balances check out">✓</span>`
+                    : `<span class="stmt-status warn" title="Expected ending balance: ${formatCurrency(expected)} (diff: ${formatCurrency(diff)})">!</span>`;
+                return `<tr onclick="openStatementModal('${s.id}')">
+                    <td>${accountName}</td>
+                    <td class="amount">${formatCurrency(s.startBalance)}</td>
+                    <td class="amount">${formatCurrency(s.endBalance)}</td>
+                    <td class="amount positive">${formatCurrency(s.deposits)}</td>
+                    <td class="amount negative">-${formatCurrency(s.withdrawals)}</td>
+                    <td class="date">${s.startDate ? formatDate(s.startDate) : '—'} – ${s.endDate ? formatDate(s.endDate) : '—'}</td>
+                    <td style="text-align:center;">${statusHtml}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openStatementModal(statementId = null) {
+            if (ledgerData.accounts.length === 0) return showMessage('Please add an account first', 'error');
+
+            // Populate account select
+            document.getElementById('statementAccount').innerHTML =
+                '<option value="">Select account...</option>' +
+                ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+
+            if (statementId) {
+                const s = (ledgerData.statements || []).find(x => x.id === statementId);
+                if (s) {
+                    document.getElementById('statementModalTitle').textContent = 'Edit Statement';
+                    document.getElementById('statementId').value = s.id;
+                    document.getElementById('statementAccount').value = s.accountId;
+                    document.getElementById('statementMonth').value = s.month;
+                    document.getElementById('statementStartDate').value = s.startDate || '';
+                    document.getElementById('statementEndDate').value = s.endDate || '';
+                    document.getElementById('statementStartBalance').value = s.startBalance;
+                    document.getElementById('statementEndBalance').value = s.endBalance;
+                    document.getElementById('statementDeposits').value = s.deposits;
+                    document.getElementById('statementWithdrawals').value = s.withdrawals;
+                    document.getElementById('deleteStatementBtn').style.display = 'block';
+                    updateStatementSanityCheck();
+                }
+            } else {
+                document.getElementById('statementModalTitle').textContent = 'Add Statement';
+                document.getElementById('statementId').value = '';
+                document.getElementById('statementForm').reset();
+                document.getElementById('deleteStatementBtn').style.display = 'none';
+                document.getElementById('statementSanityCheck').style.display = 'none';
+                if (selectedMonth) document.getElementById('statementMonth').value = selectedMonth;
+            }
+
+            document.getElementById('statementModal').classList.add('active');
+            setTimeout(() => document.getElementById('statementAccount').focus(), 100);
+
+            // Live sanity check
+            ['statementStartBalance','statementEndBalance','statementDeposits','statementWithdrawals'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateStatementSanityCheck);
+            });
+        }
+
+        function updateStatementSanityCheck() {
+            const start = parseFloat(document.getElementById('statementStartBalance').value) || 0;
+            const end = parseFloat(document.getElementById('statementEndBalance').value) || 0;
+            const dep = parseFloat(document.getElementById('statementDeposits').value) || 0;
+            const wit = parseFloat(document.getElementById('statementWithdrawals').value) || 0;
+            const expected = start + dep - wit;
+            const diff = Math.abs(expected - end);
+            const box = document.getElementById('statementSanityCheck');
+            if (dep === 0 && wit === 0 && start === 0 && end === 0) { box.style.display = 'none'; return; }
+            box.style.display = 'block';
+            if (diff < 0.005) {
+                box.className = 'statement-sanity ok';
+                box.textContent = '✓ Balances check out: ' + formatCurrency(start) + ' + ' + formatCurrency(dep) + ' – ' + formatCurrency(wit) + ' = ' + formatCurrency(expected);
+            } else {
+                box.className = 'statement-sanity warn';
+                box.textContent = '⚠ Expected ending balance: ' + formatCurrency(expected) + ' (entered: ' + formatCurrency(end) + ', diff: ' + formatCurrency(diff) + ')';
+            }
+        }
+
+        function closeStatementModal() {
+            document.getElementById('statementModal').classList.remove('active');
+        }
+
+        function saveStatement() {
+            const id = document.getElementById('statementId').value;
+            const accountId = document.getElementById('statementAccount').value;
+            const month = parseInt(document.getElementById('statementMonth').value);
+            const startDate = document.getElementById('statementStartDate').value;
+            const endDate = document.getElementById('statementEndDate').value;
+            const startBalance = parseFloat(document.getElementById('statementStartBalance').value);
+            const endBalance = parseFloat(document.getElementById('statementEndBalance').value);
+            const deposits = parseFloat(document.getElementById('statementDeposits').value);
+            const withdrawals = parseFloat(document.getElementById('statementWithdrawals').value);
+
+            if (!accountId || !month || !startDate || !endDate || isNaN(startBalance) || isNaN(endBalance) || isNaN(deposits) || isNaN(withdrawals)) {
+                return showMessage('Please fill in all required fields', 'error');
+            }
+
+            if (!ledgerData.statements) ledgerData.statements = [];
+
+            // Check for duplicate (same account + month), excluding self
+            const duplicate = ledgerData.statements.find(s => s.accountId === accountId && s.month === month && s.id !== id);
+            if (duplicate) return showMessage('A statement already exists for this account and month', 'error');
+
+            if (id) {
+                const s = ledgerData.statements.find(x => x.id === id);
+                if (s) Object.assign(s, { accountId, month, startDate, endDate, startBalance, endBalance, deposits, withdrawals });
+            } else {
+                ledgerData.statements.push({ id: Date.now().toString(), accountId, month, startDate, endDate, startBalance, endBalance, deposits, withdrawals });
+            }
+
+            markUnsaved();
+            updateUI();
+            closeStatementModal();
+            showMessage(id ? 'Statement updated!' : 'Statement added!');
+        }
+
+        function confirmDeleteStatement() {
+            const id = document.getElementById('statementId').value;
+            if (!id) return;
+            pendingAction = { type: 'deleteStatement', id };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Statement';
+            document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this statement?</p>';
+            document.getElementById('confirmActionBtn').textContent = 'Delete Statement';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
         }
 
         document.querySelectorAll('.modal').forEach(m => {

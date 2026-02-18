@@ -759,3 +759,51 @@ input[type="checkbox"] {
     font-size: 0.875rem;
     cursor: pointer;
 }
+
+.tab-incomplete {
+    position: relative;
+}
+.tab-incomplete::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #F59E0B;
+    box-shadow: 0 0 0 1.5px var(--color-bg, #fff);
+}
+.stmt-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: default;
+}
+.stmt-status.ok {
+    background: #D1FAE5;
+    color: #065F46;
+}
+.stmt-status.warn {
+    background: #FEF3C7;
+    color: #92400E;
+}
+.statement-sanity {
+    padding: 0.6rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+.statement-sanity.ok {
+    background: #D1FAE5;
+    color: #065F46;
+}
+.statement-sanity.warn {
+    background: #FEF3C7;
+    color: #92400E;
+}
