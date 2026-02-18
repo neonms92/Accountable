@@ -99,6 +99,16 @@
                     <div class="summary-value negative" id="totalLiabilitiesYTD">$0.00</div>
                     <div class="summary-delta" id="totalLiabilitiesDelta">$0.00</div>
                 </div>
+                <div class="summary-card">
+                    <div class="summary-card-header">Budget Gap</div>
+                    <div class="summary-card-subheader">Account Balance − Envelope Funding</div>
+                    <div class="summary-value" id="budgetGapValue">$0.00</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-card-header">Necessary Expenses</div>
+                    <div class="summary-card-subheader">Transactions from Necessary Envelopes</div>
+                    <div class="summary-value negative" id="necessaryExpensesValue">$0.00</div>
+                </div>
             </div>
         </div>
 
@@ -129,7 +139,7 @@
                 <div class="section-header">
                     <h2 class="section-title">Paychecks</h2>
                     <div class="action-row">
-                        <button onclick="importCSVFor('paychecks')" class="secondary">Import CSV</button>
+                        <button onclick="importFor('paychecks')" class="secondary">Import</button>
                         <button onclick="openPaycheckModal()">+ Add Entry</button>
                     </div>
                 </div>
@@ -138,6 +148,7 @@
                         <thead>
                             <tr>
                                 <th style="width: 40px;"><input type="checkbox" id="selectAllPaychecks" onchange="toggleSelectAll('paychecks')"></th>
+                                <th class="sortable" onclick="sortTable('paychecks', 'date')">Date</th>
                                 <th class="sortable" onclick="sortTable('paychecks', 'month')">Month</th>
                                 <th class="sortable" onclick="sortTable('paychecks', 'account')">Account</th>
                                 <th class="sortable" style="text-align: right;" onclick="sortTable('paychecks', 'amount')">Amount</th>
@@ -161,7 +172,7 @@
                 <div class="section-header">
                     <h2 class="section-title">Statements</h2>
                     <div class="action-row">
-                        <button onclick="importCSVFor('statements')" class="secondary">Import CSV</button>
+                        <button onclick="importFor('statements')" class="secondary">Import</button>
                         <button onclick="openStatementModal()">+ Add Statement</button>
                     </div>
                 </div>
@@ -189,7 +200,7 @@
                 <div class="section-header">
                     <h2 class="section-title">Envelopes</h2>
                     <div class="action-row">
-                        <button onclick="importCSVFor('envelopes')" class="secondary">Import CSV</button>
+                        <button onclick="importFor('envelopes')" class="secondary">Import</button>
                         <button onclick="openEnvelopeModal()">+ Add Envelope</button>
                     </div>
                 </div>
@@ -214,7 +225,7 @@
                 <div class="section-header">
                     <h2 class="section-title">Transactions</h2>
                     <div class="action-row">
-                        <button onclick="importCSVFor('transactions')" class="secondary">Import CSV</button>
+                        <button onclick="importFor('transactions')" class="secondary">Import</button>
                         <button onclick="openTransactionModal()" class="secondary">+ Add Transaction</button>
                         <button onclick="openTransferModal()" class="secondary">↔ Transfer</button>
                     </div>
@@ -518,6 +529,13 @@
                             </div>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="envelopeNecessary">
+                            <label for="envelopeNecessary">Necessary</label>
+                        </div>
+                        <div class="field-hint">Mark this envelope as a necessary expense for Summary reporting.</div>
+                    </div>
                     <div class="form-group" id="envelopeFundingGroup">
                         <label for="envelopeFunding" id="envelopeFundingLabel">Funding <span id="envelopeFundingMonthLabel"></span></label>
                         <input type="number" id="envelopeFunding" step="0.01" min="0" placeholder="0.00">
@@ -553,23 +571,29 @@
                             <button type="button" id="paycheckTypeDeduction" class="toggle-btn" onclick="switchPaycheckType('negative')">Deduction</button>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="paycheckMonth">Month</label>
-                        <select id="paycheckMonth" required>
-                            <option value="">Select month...</option>
-                            <option value="1">January</option>
-                            <option value="2">February</option>
-                            <option value="3">March</option>
-                            <option value="4">April</option>
-                            <option value="5">May</option>
-                            <option value="6">June</option>
-                            <option value="7">July</option>
-                            <option value="8">August</option>
-                            <option value="9">September</option>
-                            <option value="10">October</option>
-                            <option value="11">November</option>
-                            <option value="12">December</option>
-                        </select>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="paycheckDate">Date</label>
+                            <input type="date" id="paycheckDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="paycheckMonth">Month</label>
+                            <select id="paycheckMonth" required>
+                                <option value="">Select month...</option>
+                                <option value="1">January</option>
+                                <option value="2">February</option>
+                                <option value="3">March</option>
+                                <option value="4">April</option>
+                                <option value="5">May</option>
+                                <option value="6">June</option>
+                                <option value="7">July</option>
+                                <option value="8">August</option>
+                                <option value="9">September</option>
+                                <option value="10">October</option>
+                                <option value="11">November</option>
+                                <option value="12">December</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="paycheckAccount">Account</label>
@@ -717,6 +741,7 @@
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('transactionDate').value = today;
             document.getElementById('transferDate').value = today;
+            document.getElementById('paycheckDate').value = today;
             const currentMonth = new Date().getMonth() + 1;
             document.getElementById('transactionMonth').value = currentMonth.toString();
             document.getElementById('transferMonth').value = currentMonth.toString();
@@ -748,6 +773,24 @@
                     e.preventDefault();
                     const ctx = getActiveSelectionContext();
                     if (ctx) moveSelection(ctx, 1);
+                }
+            });
+
+            document.addEventListener('paste', (e) => {
+                // Only handle paste when no modal is open and an importable tab is active
+                if (isAnyModalOpen()) return;
+                const ctx = getActiveImportTab();
+                if (!ctx) return;
+                // Ignore paste inside input/textarea elements
+                const tag = document.activeElement && document.activeElement.tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                if (!text || !text.trim()) return;
+                try {
+                    parseImportText(ctx, text, null);
+                } catch (err) {
+                    showMessage('Paste import error: ' + err.message, 'error');
                 }
             });
         }
@@ -826,9 +869,10 @@
                             if (!ledgerData.envelopes) ledgerData.envelopes = {};
                             if (!ledgerData.statements) ledgerData.statements = [];
                             if (!ledgerData.paychecks) ledgerData.paychecks = [];
-                            // Migrate envelopes: ensure all have a funding object
+                            // Migrate envelopes: ensure all have a funding object and necessary flag
                             Object.keys(ledgerData.envelopes).forEach(name => {
                                 if (!ledgerData.envelopes[name].funding) ledgerData.envelopes[name].funding = {};
+                                if (ledgerData.envelopes[name].necessary === undefined) ledgerData.envelopes[name].necessary = false;
                             });
                             updateUI();
                             showMessage('File loaded successfully!');
@@ -876,24 +920,213 @@
             }
         }
 
-        // ─── Unified CSV Import ───────────────────────────────────────────────────────
+        window.addEventListener('beforeunload', (e) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        // ─── Unified Import (CSV + JSON) ──────────────────────────────────────────────
+
+        // Returns the currently active importable tab name, or null
+        function getActiveImportTab() {
+            const tabs = ['transactions', 'paychecks', 'envelopes', 'statements'];
+            for (const t of tabs) {
+                if (document.getElementById(t + 'Tab').classList.contains('active')) return t;
+            }
+            return null;
+        }
+
+        // Returns true if any modal is currently open
+        function isAnyModalOpen() {
+            return Array.from(document.querySelectorAll('.modal')).some(m => m.classList.contains('active'));
+        }
 
         // Entry point: open a file picker then route to the right parser
-        function importCSVFor(ctx) {
+        function importFor(ctx) {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = '.csv';
+            input.accept = '.csv,.json';
             input.onchange = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (ev) => {
-                    try { parseCSVFor(ctx, ev.target.result); }
-                    catch (err) { showMessage('Error parsing CSV: ' + err.message, 'error'); }
+                    try { parseImportText(ctx, ev.target.result, file.name); }
+                    catch (err) { showMessage('Error parsing file: ' + err.message, 'error'); }
                 };
                 reader.readAsText(file);
             };
             input.click();
+        }
+
+        function parseImportText(ctx, text, filename) {
+            const trimmed = text.trim();
+            const isJson = filename ? filename.toLowerCase().endsWith('.json') : (trimmed.startsWith('{') || trimmed.startsWith('['));
+            if (isJson) {
+                parseImportJSON(ctx, trimmed);
+            } else {
+                const { header, rows } = parseCSVRows(trimmed);
+                parseCSVFor(ctx, header, rows);
+            }
+        }
+
+        // ── JSON import ───────────────────────────────────────────────────────────────
+        // Accepts full ledger export OR arrays of the relevant entity type.
+        // Only imports data matching the current ctx tab — discards the rest.
+        function parseImportJSON(ctx, text) {
+            let data;
+            try { data = JSON.parse(text); }
+            catch(e) { return showMessage('Invalid JSON: ' + e.message, 'error'); }
+
+            // If it looks like a full ledger export, extract just the relevant array/object
+            let extracted;
+            if (ctx === 'transactions') {
+                extracted = Array.isArray(data) ? data : (data.transactions || null);
+                if (!extracted) return showMessage('JSON has no transactions array', 'error');
+                parseTransactionsJSON(extracted);
+            } else if (ctx === 'paychecks') {
+                extracted = Array.isArray(data) ? data : (data.paychecks || null);
+                if (!extracted) return showMessage('JSON has no paychecks array', 'error');
+                parsePaychecksJSON(extracted);
+            } else if (ctx === 'envelopes') {
+                extracted = Array.isArray(data) ? null : (data.envelopes || (typeof data === 'object' && !Array.isArray(data) ? data : null));
+                if (!extracted) return showMessage('JSON has no envelopes object', 'error');
+                parseEnvelopesJSON(extracted);
+            } else if (ctx === 'statements') {
+                extracted = Array.isArray(data) ? data : (data.statements || null);
+                if (!extracted) return showMessage('JSON has no statements array', 'error');
+                parseStatementsJSON(extracted);
+            }
+        }
+
+        function parseTransactionsJSON(items) {
+            const newTransactions = [], newAccounts = new Set(), newEnvelopes = new Set();
+            items.forEach((item, i) => {
+                if (!item.date || item.amount === undefined) return;
+                // Resolve account: prefer accountId, fall back to account name field
+                let accName = item.account || '';
+                if (item.accountId) {
+                    const acc = ledgerData.accounts.find(a => a.id === item.accountId);
+                    if (acc) accName = acc.name; else if (!accName) accName = 'Unknown';
+                }
+                if (accName && !ledgerData.accounts.find(a => a.name === accName)) newAccounts.add(accName);
+                const envelope = item.envelope || '';
+                if (envelope && !ledgerData.envelopes[envelope]) newEnvelopes.add(envelope);
+                const month = item.month || (new Date(item.date + 'T00:00:00').getMonth() + 1);
+                newTransactions.push({ date: item.date, month, account: accName, amount: parseFloat(item.amount), description: item.description || '', envelope });
+            });
+            const newItems = [];
+            if (newAccounts.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (newEnvelopes.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>${[...newEnvelopes].map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul></div>`);
+            const body = (newItems.length ? '<p>The JSON contains the following new items:</p>' + newItems.join('') : '') + `<p>Import <strong>${newTransactions.length}</strong> transaction(s)?</p>`;
+            showImportConfirm('Import Transactions (JSON)', body, () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                [...newEnvelopes].forEach(name => { if (!ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} }; });
+                newTransactions.forEach(t => {
+                    const acc = ledgerData.accounts.find(a => a.name === t.account);
+                    if (acc) ledgerData.transactions.push({ id: Date.now().toString() + Math.random(), date: t.date, month: t.month, accountId: acc.id, amount: t.amount, description: t.description, envelope: t.envelope });
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Imported ${newTransactions.length} transaction(s)`);
+            });
+        }
+
+        function parsePaychecksJSON(items) {
+            const newEntries = [], newAccounts = new Set(), newEnvelopes = new Set(), errors = [];
+            items.forEach((item, i) => {
+                if (item.amount === undefined || !item.month) { errors.push(`Item ${i+1}: missing amount or month`); return; }
+                let accName = item.account || '';
+                if (item.accountId) { const acc = ledgerData.accounts.find(a => a.id === item.accountId); if (acc) accName = acc.name; }
+                if (accName && !ledgerData.accounts.find(a => a.name === accName)) newAccounts.add(accName);
+                const envelope = item.envelope || '';
+                const amount = parseFloat(item.amount);
+                if (amount < 0 && !envelope) { errors.push(`Item ${i+1}: deduction requires envelope`); return; }
+                if (envelope && !ledgerData.envelopes[envelope]) newEnvelopes.add(envelope);
+                newEntries.push({ month: item.month, date: item.date || null, account: accName, amount, gross: item.gross ? parseFloat(item.gross) : null, tithingType: item.tithingType || 'tithing', envelope });
+            });
+            if (errors.length) return showMessage('JSON errors:\n' + errors.join('\n'), 'error');
+            const newItems = [];
+            if (newAccounts.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (newEnvelopes.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>${[...newEnvelopes].map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul></div>`);
+            const body = (newItems.length ? '<p>The JSON contains the following new items:</p>' + newItems.join('') : '') + `<p>Import <strong>${newEntries.length}</strong> paycheck entr(ies)?</p>`;
+            showImportConfirm('Import Paycheck Entries (JSON)', body, () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                [...newEnvelopes].forEach(name => { if (!ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} }; });
+                if (!ledgerData.paychecks) ledgerData.paychecks = [];
+                newEntries.forEach(e => {
+                    const acc = ledgerData.accounts.find(a => a.name === e.account);
+                    if (!acc) return;
+                    const newId = Date.now().toString() + Math.random();
+                    const year = new Date().getFullYear();
+                    const dateStr = e.date || `${year}-${String(e.month).padStart(2,'0')}-01`;
+                    if (e.amount < 0) {
+                        const txId = paycheckCreateLinkedTransaction(newId, e.month, acc.id, e.amount, e.envelope, dateStr);
+                        ledgerData.paychecks.push({ id: newId, date: dateStr, month: e.month, accountId: acc.id, amount: e.amount, envelope: e.envelope, linkedTransactionId: txId });
+                    } else {
+                        ledgerData.paychecks.push({ id: newId, date: dateStr, month: e.month, accountId: acc.id, amount: e.amount, gross: e.gross, tithingType: e.tithingType });
+                    }
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Imported ${newEntries.length} paycheck entr(ies)`);
+            });
+        }
+
+        function parseEnvelopesJSON(envelopesObj) {
+            const toAdd = [], toUpdate = [];
+            Object.entries(envelopesObj).forEach(([name, env]) => {
+                if (!name || name === 'Transfer') return;
+                const color = env.color || '#2D5F3F';
+                const funding = env.funding || {};
+                const necessary = !!env.necessary;
+                if (ledgerData.envelopes[name]) toUpdate.push({ name, color, funding, necessary });
+                else toAdd.push({ name, color, funding, necessary });
+            });
+            const parts = [];
+            if (toAdd.length) parts.push(`Add <strong>${toAdd.length}</strong> new envelope(s): ${toAdd.map(e=>escapeHtml(e.name)).join(', ')}`);
+            if (toUpdate.length) parts.push(`Update <strong>${toUpdate.length}</strong> existing envelope(s): ${toUpdate.map(e=>escapeHtml(e.name)).join(', ')}`);
+            if (!parts.length) return showMessage('No valid envelope data found in JSON', 'error');
+            showImportConfirm('Import Envelopes (JSON)', '<p>' + parts.join('<br>') + '</p>', () => {
+                toAdd.forEach(e => { ledgerData.envelopes[e.name] = { color: e.color, funding: e.funding, necessary: e.necessary }; });
+                toUpdate.forEach(e => { ledgerData.envelopes[e.name].color = e.color; ledgerData.envelopes[e.name].necessary = e.necessary; Object.assign(ledgerData.envelopes[e.name].funding || (ledgerData.envelopes[e.name].funding = {}), e.funding); });
+                markUnsaved(); updateUI();
+                showMessage(`Processed ${toAdd.length + toUpdate.length} envelope(s) (${toAdd.length} added, ${toUpdate.length} updated)`);
+            });
+        }
+
+        function parseStatementsJSON(items) {
+            const toAdd = [], toUpdate = [], newAccounts = new Set(), errors = [];
+            items.forEach((item, i) => {
+                const month = parseInt(item.month);
+                if (isNaN(month) || month < 1 || month > 12) { errors.push(`Item ${i+1}: invalid month`); return; }
+                let accName = item.account || '';
+                if (item.accountId) { const acc = ledgerData.accounts.find(a => a.id === item.accountId); if (acc) accName = acc.name; }
+                if (!ledgerData.accounts.find(a => a.name === accName)) newAccounts.add(accName);
+                const acc = ledgerData.accounts.find(a => a.name === accName);
+                const s = { accountName: accName, accountId: acc ? acc.id : null, month, startDate: item.startDate || '', endDate: item.endDate || '', startBalance: parseFloat(item.startBalance) || 0, endBalance: parseFloat(item.endBalance) || 0, deposits: parseFloat(item.deposits) || 0, withdrawals: parseFloat(item.withdrawals) || 0 };
+                const existing = acc ? (ledgerData.statements || []).find(x => x.accountId === acc.id && x.month === month) : null;
+                if (existing) toUpdate.push({ ...s, existingId: existing.id });
+                else toAdd.push(s);
+            });
+            if (errors.length) return showMessage('JSON errors:\n' + errors.join('\n'), 'error');
+            const parts = [];
+            if (newAccounts.size) parts.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts (will be created):</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (toAdd.length) parts.push(`<p>Add <strong>${toAdd.length}</strong> new statement(s)</p>`);
+            if (toUpdate.length) parts.push(`<p>Update <strong>${toUpdate.length}</strong> existing statement(s)</p>`);
+            if (!parts.length) return showMessage('No valid statement data found', 'error');
+            showImportConfirm('Import Statements (JSON)', parts.join(''), () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                if (!ledgerData.statements) ledgerData.statements = [];
+                [...toAdd, ...toUpdate].forEach(s => {
+                    const acc = ledgerData.accounts.find(a => a.name === s.accountName);
+                    if (!acc) return;
+                    if (s.existingId) { const ex = ledgerData.statements.find(x => x.id === s.existingId); if (ex) Object.assign(ex, { accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals }); }
+                    else ledgerData.statements.push({ id: Date.now().toString() + Math.random(), accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Processed ${toAdd.length + toUpdate.length} statement(s) (${toAdd.length} added, ${toUpdate.length} updated)`);
+            });
         }
 
         function parseCSVRows(text) {
@@ -903,7 +1136,6 @@
             const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
             const rows = [];
             for (let i = 1; i < lines.length; i++) {
-                // Simple split — handles quoted fields containing commas
                 const values = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)
                     .map(v => v.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
                 if (values.every(v => v === '')) continue;
@@ -914,22 +1146,14 @@
             return { header, rows };
         }
 
-        function parseCSVFor(ctx, text) {
-            const { header, rows } = parseCSVRows(text);
-
-            if (ctx === 'transactions') {
-                parseTransactionsCSV(header, rows);
-            } else if (ctx === 'paychecks') {
-                parsePaychecksCSV(header, rows);
-            } else if (ctx === 'envelopes') {
-                parseEnvelopesCSV(header, rows);
-            } else if (ctx === 'statements') {
-                parseStatementsCSV(header, rows);
-            }
+        function parseCSVFor(ctx, header, rows) {
+            if (ctx === 'transactions') parseTransactionsCSV(header, rows);
+            else if (ctx === 'paychecks') parsePaychecksCSV(header, rows);
+            else if (ctx === 'envelopes') parseEnvelopesCSV(header, rows);
+            else if (ctx === 'statements') parseStatementsCSV(header, rows);
         }
 
         // ── Transactions CSV ──────────────────────────────────────────────────────────
-        // Required: date, account, amount, description  Optional: month, envelope
         function parseTransactionsCSV(header, rows) {
             const required = ['date', 'account', 'amount', 'description'];
             const missing = required.filter(f => !header.includes(f));
@@ -965,8 +1189,7 @@
         }
 
         // ── Paychecks CSV ─────────────────────────────────────────────────────────────
-        // Required: month, account, amount  Optional: gross, tithing_type, envelope
-        // Positive amount → income entry; negative → deduction (envelope required)
+        // Required: month, account, amount  Optional: date, gross, tithing_type, envelope
         function parsePaychecksCSV(header, rows) {
             const required = ['month', 'account', 'amount'];
             const missing = required.filter(f => !header.includes(f));
@@ -982,7 +1205,9 @@
                 const envelope = row.envelope || '';
                 if (amount < 0 && !envelope) { errors.push(`Row ${i+2}: deduction entry requires an envelope`); return; }
                 if (envelope && !ledgerData.envelopes[envelope]) newEnvelopes.add(envelope);
-                newEntries.push({ month, account, amount, gross: row.gross ? parseFloat(row.gross) : null, tithingType: row.tithing_type || row.tithingtype || 'tithing', envelope });
+                const year = new Date().getFullYear();
+                const date = row.date || `${year}-${String(month).padStart(2,'0')}-01`;
+                newEntries.push({ month, date, account, amount, gross: row.gross ? parseFloat(row.gross) : null, tithingType: row.tithing_type || row.tithingtype || 'tithing', envelope });
             });
 
             if (errors.length) return showMessage('CSV errors:\n' + errors.join('\n'), 'error');
@@ -1003,10 +1228,10 @@
                     if (!ledgerData.paychecks) ledgerData.paychecks = [];
                     const newId = Date.now().toString() + Math.random();
                     if (e.amount < 0) {
-                        const txId = paycheckCreateLinkedTransaction(newId, e.month, acc.id, e.amount, e.envelope);
-                        ledgerData.paychecks.push({ id: newId, month: e.month, accountId: acc.id, amount: e.amount, envelope: e.envelope, linkedTransactionId: txId });
+                        const txId = paycheckCreateLinkedTransaction(newId, e.month, acc.id, e.amount, e.envelope, e.date);
+                        ledgerData.paychecks.push({ id: newId, date: e.date, month: e.month, accountId: acc.id, amount: e.amount, envelope: e.envelope, linkedTransactionId: txId });
                     } else {
-                        ledgerData.paychecks.push({ id: newId, month: e.month, accountId: acc.id, amount: e.amount, gross: e.gross, tithingType: e.tithingType });
+                        ledgerData.paychecks.push({ id: newId, date: e.date, month: e.month, accountId: acc.id, amount: e.amount, gross: e.gross, tithingType: e.tithingType });
                     }
                 });
                 markUnsaved(); updateUI();
@@ -1015,8 +1240,7 @@
         }
 
         // ── Envelopes CSV ─────────────────────────────────────────────────────────────
-        // Required: name  Optional: color, funding_<month> (e.g. funding_1, funding_3)
-        // Upsert: if envelope name exists, update its color and any provided funding months
+        // Required: name  Optional: color, necessary, funding_<month>
         function parseEnvelopesCSV(header, rows) {
             if (!header.includes('name')) return showMessage('Envelopes CSV missing required column: name', 'error');
 
@@ -1025,7 +1249,7 @@
                 const name = row.name;
                 if (!name) return;
                 const color = row.color || '#2D5F3F';
-                // Extract any funding_N columns
+                const necessary = row.necessary === 'true' || row.necessary === '1';
                 const funding = {};
                 header.forEach(col => {
                     const m = col.match(/^funding_(\d+)$/);
@@ -1033,8 +1257,8 @@
                         funding[parseInt(m[1])] = parseFloat(row[col]) || 0;
                     }
                 });
-                if (ledgerData.envelopes[name]) toUpdate.push({ name, color, funding });
-                else toAdd.push({ name, color, funding });
+                if (ledgerData.envelopes[name]) toUpdate.push({ name, color, funding, necessary });
+                else toAdd.push({ name, color, funding, necessary });
             });
 
             const parts = [];
@@ -1043,11 +1267,10 @@
             if (!parts.length) return showMessage('No valid envelope rows found in CSV', 'error');
 
             showImportConfirm('Import Envelopes', '<p>' + parts.join('<br>') + '</p>', () => {
-                toAdd.forEach(e => {
-                    ledgerData.envelopes[e.name] = { color: e.color, funding: e.funding };
-                });
+                toAdd.forEach(e => { ledgerData.envelopes[e.name] = { color: e.color, funding: e.funding, necessary: e.necessary }; });
                 toUpdate.forEach(e => {
                     ledgerData.envelopes[e.name].color = e.color;
+                    ledgerData.envelopes[e.name].necessary = e.necessary;
                     if (!ledgerData.envelopes[e.name].funding) ledgerData.envelopes[e.name].funding = {};
                     Object.assign(ledgerData.envelopes[e.name].funding, e.funding);
                 });
@@ -1057,9 +1280,6 @@
         }
 
         // ── Statements CSV ────────────────────────────────────────────────────────────
-        // Required: account, month, start_balance, end_balance, deposits, withdrawals
-        // Optional: start_date, end_date
-        // Upsert: if statement for account+month exists, update it
         function parseStatementsCSV(header, rows) {
             const required = ['account', 'month', 'start_balance', 'end_balance', 'deposits', 'withdrawals'];
             const missing = required.filter(f => !header.includes(f));
@@ -1072,17 +1292,7 @@
                 if (isNaN(month) || month < 1 || month > 12) { errors.push(`Row ${i+2}: invalid month`); return; }
                 const acc = ledgerData.accounts.find(a => a.name === accountName);
                 if (!acc) { newAccounts.add(accountName); }
-                const s = {
-                    accountName,
-                    accountId: acc ? acc.id : null,
-                    month,
-                    startDate: row.start_date || row.startdate || '',
-                    endDate: row.end_date || row.enddate || '',
-                    startBalance: parseFloat(row.start_balance) || 0,
-                    endBalance: parseFloat(row.end_balance) || 0,
-                    deposits: parseFloat(row.deposits) || 0,
-                    withdrawals: parseFloat(row.withdrawals) || 0,
-                };
+                const s = { accountName, accountId: acc ? acc.id : null, month, startDate: row.start_date || row.startdate || '', endDate: row.end_date || row.enddate || '', startBalance: parseFloat(row.start_balance) || 0, endBalance: parseFloat(row.end_balance) || 0, deposits: parseFloat(row.deposits) || 0, withdrawals: parseFloat(row.withdrawals) || 0 };
                 const existing = acc ? (ledgerData.statements || []).find(x => x.accountId === acc.id && x.month === month) : null;
                 if (existing) toUpdate.push({ ...s, existingId: existing.id });
                 else toAdd.push(s);
@@ -1102,12 +1312,8 @@
                 [...toAdd, ...toUpdate].forEach(s => {
                     const acc = ledgerData.accounts.find(a => a.name === s.accountName);
                     if (!acc) return;
-                    if (s.existingId) {
-                        const existing = ledgerData.statements.find(x => x.id === s.existingId);
-                        if (existing) Object.assign(existing, { accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
-                    } else {
-                        ledgerData.statements.push({ id: Date.now().toString() + Math.random(), accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
-                    }
+                    if (s.existingId) { const existing = ledgerData.statements.find(x => x.id === s.existingId); if (existing) Object.assign(existing, { accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals }); }
+                    else ledgerData.statements.push({ id: Date.now().toString() + Math.random(), accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
                 });
                 markUnsaved(); updateUI();
                 showMessage(`Processed ${toAdd.length + toUpdate.length} statement(s) (${toAdd.length} added, ${toUpdate.length} updated)`);
@@ -1557,6 +1763,29 @@
             document.getElementById('totalLiabilitiesYTD').textContent = formatCurrency(ytdL);
             document.getElementById('totalLiabilitiesDelta').textContent = formatCurrency(Math.abs(deltaL));
             document.getElementById('totalLiabilitiesDelta').className = deltaL >= 0 ? 'summary-delta negative' : 'summary-delta positive';
+
+            // ── Budget Gap: total account balance minus total envelope funding ──────────
+            const totalAccountBalance = Object.values(ytdBal).reduce((s, v) => s + v, 0);
+            const envNames = Object.keys(ledgerData.envelopes || {}).filter(n => n !== 'Transfer');
+            const checkMonth = selectedMonth === null ? 12 : selectedMonth;
+            const totalEnvelopeFunding = envNames.reduce((s, name) => {
+                return s + (selectedMonth
+                    ? getEnvelopeFunding(name, selectedMonth)
+                    : Array.from({length:12},(_,i)=>i+1).reduce((fs,m)=>fs+getEnvelopeFunding(name,m),0));
+            }, 0);
+            const budgetGap = totalAccountBalance - totalEnvelopeFunding;
+            const budgetGapEl = document.getElementById('budgetGapValue');
+            budgetGapEl.textContent = formatCurrency(budgetGap);
+            budgetGapEl.className = budgetGap >= 0 ? 'summary-value positive' : 'summary-value negative';
+
+            // ── Necessary Expenses: total withdrawal amount from Necessary envelopes ────
+            const necessaryEnvelopes = new Set(envNames.filter(n => ledgerData.envelopes[n].necessary));
+            const filtTrans = getFilteredTransactions();
+            const necessaryAmt = filtTrans
+                .filter(t => t.amount < 0 && necessaryEnvelopes.has(t.envelope))
+                .reduce((s, t) => s + Math.abs(t.amount), 0);
+            const necessaryEl = document.getElementById('necessaryExpensesValue');
+            necessaryEl.textContent = formatCurrency(necessaryAmt);
         }
 
         function updateAccountsTable() {
@@ -1749,12 +1978,14 @@
 
             let color = '#2D5F3F';
             let fundingVal = '';
+            let necessary = false;
 
             if (isEdit && ledgerData.envelopes[name]) {
                 const env = ledgerData.envelopes[name];
                 document.getElementById('envelopeName').value = name;
                 document.getElementById('envelopeName').readOnly = true; // name is the key, renaming would be complex
                 color = env.color || '#2D5F3F';
+                necessary = !!env.necessary;
 
                 if (selectedMonth) {
                     const explicit = (env.funding || {})[selectedMonth];
@@ -1791,6 +2022,7 @@
             envelopeModalColor = color;
             document.getElementById('envelopeModalColorPreview').style.background = color;
             document.getElementById('envelopeModalColorHex').value = color;
+            document.getElementById('envelopeNecessary').checked = necessary;
 
             // Wire up color picker
             document.querySelectorAll('#envelopeModal .color-preset').forEach(btn => {
@@ -1814,6 +2046,7 @@
             const oldName = document.getElementById('envelopeId').value;
             const name = document.getElementById('envelopeName').value.trim();
             const color = envelopeModalColor;
+            const necessary = document.getElementById('envelopeNecessary').checked;
 
             if (!name) return showMessage('Please enter an envelope name', 'error');
 
@@ -1822,11 +2055,12 @@
             if (!isEdit) {
                 // Creating new envelope
                 if (ledgerData.envelopes[name]) return showMessage('An envelope with this name already exists', 'error');
-                ledgerData.envelopes[name] = { color, funding: {} };
+                ledgerData.envelopes[name] = { color, funding: {}, necessary };
             } else {
                 // Editing existing
                 if (!ledgerData.envelopes[oldName]) return;
                 ledgerData.envelopes[oldName].color = color;
+                ledgerData.envelopes[oldName].necessary = necessary;
             }
 
             // Save funding if a month is selected
@@ -2109,7 +2343,7 @@
             if (filtered.length === 0) {
                 const msg = selectedMonth ? 'No paycheck entries for this month' : 'No paycheck entries yet';
                 const desc = selectedMonth ? 'Add entries or select a different month' : 'Add your first paycheck entry to start tracking';
-                tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">💰</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">💰</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
                 selectedItems.paychecks.clear();
                 updateSelectionUI('paychecks');
                 return;
@@ -2119,7 +2353,8 @@
             if (sortState.table === 'paychecks') {
                 sorted.sort((a, b) => {
                     let vA, vB;
-                    if (sortState.column === 'month') { vA = a.month; vB = b.month; }
+                    if (sortState.column === 'date') { vA = a.date || ''; vB = b.date || ''; }
+                    else if (sortState.column === 'month') { vA = a.month; vB = b.month; }
                     else if (sortState.column === 'account') {
                         const accA = ledgerData.accounts.find(x => x.id === a.accountId);
                         const accB = ledgerData.accounts.find(x => x.id === b.accountId);
@@ -2129,13 +2364,18 @@
                     return sortState.direction === 'asc' ? (vA > vB ? 1 : -1) : (vA < vB ? 1 : -1);
                 });
             } else {
-                sorted.sort((a, b) => a.month !== b.month ? a.month - b.month : (a.amount > 0 ? -1 : 1));
+                sorted.sort((a, b) => {
+                    if (a.month !== b.month) return a.month - b.month;
+                    if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
+                    return a.amount > 0 ? -1 : 1;
+                });
             }
 
             tbody.innerHTML = sorted.map((p, idx) => {
                 const acc = ledgerData.accounts.find(x => x.id === p.accountId);
                 const accName = acc ? escapeHtml(acc.name) : 'Unknown';
                 const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][p.month - 1] || '';
+                const dateDisplay = p.date ? formatDate(p.date) : '—';
                 const checked = selectedItems.paychecks.has(p.id) ? 'checked' : '';
                 let details = '';
                 if (p.amount > 0) {
@@ -2147,6 +2387,7 @@
                 }
                 return `<tr onclick="handleRowClick('paychecks','${p.id}',${idx},event)">
                     <td><input type="checkbox" ${checked} data-id="${p.id}"></td>
+                    <td class="date">${dateDisplay}</td>
                     <td>${monthName}</td>
                     <td>${accName}</td>
                     <td class="amount ${p.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(p.amount)}</td>
@@ -2181,6 +2422,7 @@
                     document.getElementById('paycheckModalTitle').textContent = isPositive ? 'Edit Income Entry' : 'Edit Deduction Entry';
                     document.getElementById('paycheckId').value = p.id;
                     document.getElementById('paycheckSign').value = isPositive ? 'positive' : 'negative';
+                    document.getElementById('paycheckDate').value = p.date || '';
                     document.getElementById('paycheckMonth').value = p.month;
                     document.getElementById('paycheckAccount').value = p.accountId;
                     document.getElementById('paycheckAmount').value = Math.abs(p.amount);
@@ -2207,6 +2449,8 @@
                 document.getElementById('paycheckSign').value = 'positive';
                 document.getElementById('paycheckForm').reset();
                 document.getElementById('paycheckSign').value = 'positive'; // reset() clears hidden fields
+                // Set today's date
+                document.getElementById('paycheckDate').value = new Date().toISOString().split('T')[0];
                 document.getElementById('paycheckAmountLabel').textContent = 'Net Amount';
                 document.getElementById('paycheckAmountHint').textContent = 'The take-home (net) pay amount. For deductions, switch type above.';
                 document.getElementById('deletePaycheckBtn').style.display = 'none';
@@ -2219,7 +2463,7 @@
             }
 
             document.getElementById('paycheckModal').classList.add('active');
-            setTimeout(() => document.getElementById('paycheckMonth').focus(), 100);
+            setTimeout(() => document.getElementById('paycheckDate').focus(), 100);
         }
 
         function switchPaycheckType(type) {
@@ -2248,11 +2492,12 @@
         function savePaycheck() {
             const id = document.getElementById('paycheckId').value;
             const sign = document.getElementById('paycheckSign').value;
+            const date = document.getElementById('paycheckDate').value;
             const month = parseInt(document.getElementById('paycheckMonth').value);
             const accountId = document.getElementById('paycheckAccount').value;
             const absAmount = parseFloat(document.getElementById('paycheckAmount').value);
 
-            if (!month || !accountId || isNaN(absAmount) || absAmount <= 0) {
+            if (!date || !month || !accountId || isNaN(absAmount) || absAmount <= 0) {
                 return showMessage('Please fill in all required fields with valid values', 'error');
             }
 
@@ -2267,14 +2512,13 @@
                 if (id) {
                     const p = ledgerData.paychecks.find(x => x.id === id);
                     if (p) {
-                        p.month = month; p.accountId = accountId; p.amount = amount; p.envelope = envelope;
-                        // Update linked transaction
+                        p.date = date; p.month = month; p.accountId = accountId; p.amount = amount; p.envelope = envelope;
                         paycheckUpdateLinkedTransaction(p);
                     }
                 } else {
                     const newId = Date.now().toString();
-                    const txId = paycheckCreateLinkedTransaction(newId, month, accountId, amount, envelope);
-                    ledgerData.paychecks.push({ id: newId, month, accountId, amount, envelope, linkedTransactionId: txId });
+                    const txId = paycheckCreateLinkedTransaction(newId, month, accountId, amount, envelope, date);
+                    ledgerData.paychecks.push({ id: newId, date, month, accountId, amount, envelope, linkedTransactionId: txId });
                 }
             } else {
                 const gross = parseFloat(document.getElementById('paycheckGross').value) || null;
@@ -2282,9 +2526,9 @@
 
                 if (id) {
                     const p = ledgerData.paychecks.find(x => x.id === id);
-                    if (p) { p.month = month; p.accountId = accountId; p.amount = amount; p.gross = gross; p.tithingType = tithingType; }
+                    if (p) { p.date = date; p.month = month; p.accountId = accountId; p.amount = amount; p.gross = gross; p.tithingType = tithingType; }
                 } else {
-                    ledgerData.paychecks.push({ id: Date.now().toString(), month, accountId, amount, gross, tithingType });
+                    ledgerData.paychecks.push({ id: Date.now().toString(), date, month, accountId, amount, gross, tithingType });
                 }
             }
 
@@ -2295,13 +2539,10 @@
         }
 
         // Create a linked transaction for a negative paycheck entry. Returns the transaction id.
-        function paycheckCreateLinkedTransaction(paycheckId, month, accountId, amount, envelope) {
+        function paycheckCreateLinkedTransaction(paycheckId, month, accountId, amount, envelope, date) {
             const txId = 'paycheck-tx-' + paycheckId;
-            const account = ledgerData.accounts.find(a => a.id === accountId);
-            const accountName = account ? account.name : 'Account';
-            // Use a representative date (1st of the month, current year)
             const year = new Date().getFullYear();
-            const dateStr = `${year}-${String(month).padStart(2,'0')}-01`;
+            const dateStr = date || `${year}-${String(month).padStart(2,'0')}-01`;
             ledgerData.transactions.push({
                 id: txId,
                 date: dateStr,
@@ -2321,12 +2562,11 @@
             if (!txId) return;
             const tx = ledgerData.transactions.find(t => t.id === txId);
             if (tx) {
+                tx.date = paycheckEntry.date || tx.date;
                 tx.month = paycheckEntry.month;
                 tx.accountId = paycheckEntry.accountId;
                 tx.amount = paycheckEntry.amount;
                 tx.envelope = paycheckEntry.envelope;
-                const year = new Date().getFullYear();
-                tx.date = `${year}-${String(paycheckEntry.month).padStart(2,'0')}-01`;
             }
         }
 
