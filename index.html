@@ -15,26 +15,32 @@
 
     <!-- 
         Todo:
+        Import generator with merchant lookup
+            Seperate application that generates CSVs for importing based on user-provided rules and historical transaction data
+        Charts
+            Spending by envelope over time
+            Account balances over time
+        Previous year's reference data
+            Import previous year's data for comparison and analysis
+        Envelopes
+            Automatic funding rules
+                Manage - Fund to average monthly spending over # previous months
+                Goal - Fund to target amount by end of given month
+
+        Done
+        Paycheck tracking
+            Complete for the month once account deposit totals match statement totals for the month
+        Refactor Envelopes
+            Added explicitly, not inferred from Transactions
+            Transactions deduct from envelope balance
+            Envelopes have manual funding rules
+            Envelopes are complete for the month once total funding matches account balance totals
         Statements
             Each account has a statement each month which declares the starting balance, ending balance, dates covered, total deposits, and total withdrawals for the month
             Simple sanity checking with deposit/withdrawal totals and starting/ending balances
         Transaction conditions
             Transactions are complete for the month once account withdrawal totals match statement totals for the month
             Transactions must also have envelopes assigned to be complete for the month
-        Refactor Envelopes
-            Added explicitly, not inferred from Transactions
-            Transactions deduct from envelope balance
-            Envelopes have manual or automatic funding rules
-            Envelopes are complete for the month once total funding matches account balance totals
-        Paycheck tracking
-            Complete for the month once account deposit totals match statement totals for the month
-        Import generator with merchant lookup
-            Seperate application that generates CSVs for importing based on user-provided rules and historical transaction data
-        Goals
-            Set target amounts for envelopes and track progress
-        Charts
-            Spending by envelope over time
-            Account balances over time
     -->
 
     <header>
@@ -66,6 +72,7 @@
     <div class="tabs">
         <button class="tab active" onclick="switchTab('summary')">Summary</button>
         <button class="tab" onclick="switchTab('accounts')">Accounts</button>
+        <button class="tab" onclick="switchTab('paychecks')">Paychecks</button>
         <button class="tab" onclick="switchTab('statements')">Statements</button>
         <button class="tab" onclick="switchTab('envelopes')">Envelopes</button>
         <button class="tab" onclick="switchTab('transactions')">Transactions</button>
@@ -106,10 +113,34 @@
                         <thead>
                             <tr>
                                 <th class="sortable" onclick="sortTable('accounts', 'name')">Account Name</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('accounts', 'deposits')">Deposits</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('accounts', 'withdrawals')">Withdrawals</th>
                                 <th class="sortable" style="text-align: right;" onclick="sortTable('accounts', 'balance')">Balance (YTD)</th>
                             </tr>
                         </thead>
                         <tbody id="accountsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <div id="paychecksTab" class="tab-content">
+            <section>
+                <div class="section-header">
+                    <h2 class="section-title">Paychecks</h2>
+                    <button onclick="openPaycheckModal()">+ Add Entry</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortTable('paychecks', 'month')">Month</th>
+                                <th class="sortable" onclick="sortTable('paychecks', 'account')">Account</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('paychecks', 'amount')">Amount</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paychecksBody"></tbody>
                     </table>
                 </div>
             </section>
@@ -490,6 +521,84 @@
         </div>
     </div>
 
+    <div id="paycheckModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="paycheckModalTitle">Add Paycheck Entry</h3>
+            </div>
+            <div class="modal-body">
+                <form id="paycheckForm">
+                    <input type="hidden" id="paycheckId">
+                    <input type="hidden" id="paycheckSign">
+                    <div class="form-group" id="paycheckTypeToggleGroup">
+                        <label>Entry Type</label>
+                        <div class="toggle-group">
+                            <button type="button" id="paycheckTypeIncome" class="toggle-btn active" onclick="switchPaycheckType('positive')">Income</button>
+                            <button type="button" id="paycheckTypeDeduction" class="toggle-btn" onclick="switchPaycheckType('negative')">Deduction</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="paycheckMonth">Month</label>
+                        <select id="paycheckMonth" required>
+                            <option value="">Select month...</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="paycheckAccount">Account</label>
+                        <select id="paycheckAccount" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="paycheckAmount" id="paycheckAmountLabel">Amount</label>
+                        <input type="number" id="paycheckAmount" step="0.01" min="0.01" placeholder="0.00" required>
+                        <div class="field-hint" id="paycheckAmountHint"></div>
+                    </div>
+                    <!-- Positive-entry fields -->
+                    <div id="paycheckPositiveFields">
+                        <div class="form-group">
+                            <label for="paycheckGross">Gross Amount</label>
+                            <input type="number" id="paycheckGross" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="paycheckTithingType">Type</label>
+                            <select id="paycheckTithingType">
+                                <option value="tithing">Tithing</option>
+                                <option value="non-tithing">Non-Tithing</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Negative-entry fields -->
+                    <div id="paycheckNegativeFields" style="display:none;">
+                        <div class="form-group">
+                            <label for="paycheckEnvelope">Envelope</label>
+                            <select id="paycheckEnvelope" required></select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left">
+                    <button id="deletePaycheckBtn" onclick="confirmDeletePaycheck()" class="danger" style="display:none;">Delete</button>
+                </div>
+                <div class="modal-footer-right">
+                    <button onclick="closePaycheckModal()" class="secondary">Cancel</button>
+                    <button onclick="savePaycheck()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="confirmModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -569,7 +678,7 @@
     <script src="gdrive.js"></script>
     <script>
         // ─── Application State ───────────────────────────────────────────────────────
-        let ledgerData = { accounts: [], transactions: [], envelopes: {}, statements: [], fileName: null };
+        let ledgerData = { accounts: [], transactions: [], envelopes: {}, statements: [], paychecks: [], fileName: null };
         let selectedMonth = null;
         let selectedEnvelopeColor = '#2D5F3F';
         let envelopeModalColor = '#2D5F3F';
@@ -692,6 +801,7 @@
                             ledgerData.fileName = file.name;
                             if (!ledgerData.envelopes) ledgerData.envelopes = {};
                             if (!ledgerData.statements) ledgerData.statements = [];
+                            if (!ledgerData.paychecks) ledgerData.paychecks = [];
                             // Migrate envelopes: ensure all have a funding object
                             Object.keys(ledgerData.envelopes).forEach(name => {
                                 if (!ledgerData.envelopes[name].funding) ledgerData.envelopes[name].funding = {};
@@ -929,6 +1039,7 @@
                 case 'deleteAccount':
                     ledgerData.accounts = ledgerData.accounts.filter(a => a.id !== pendingAction.id);
                     ledgerData.transactions = ledgerData.transactions.filter(t => t.accountId !== pendingAction.id);
+                    ledgerData.paychecks = (ledgerData.paychecks || []).filter(p => p.accountId !== pendingAction.id);
                     markUnsaved();
                     updateUI();
                     closeAccountModal();
@@ -967,6 +1078,13 @@
                     updateUI();
                     closeEnvelopeModal();
                     showMessage('Envelope deleted!');
+                    break;
+                case 'deletePaycheck':
+                    paycheckDeleteAndCleanup(pendingAction.id);
+                    markUnsaved();
+                    updateUI();
+                    closePaycheckModal();
+                    showMessage('Paycheck entry deleted!');
                     break;
             }
 
@@ -1248,6 +1366,7 @@
             updateFileName();
             updateSummary();
             updateAccountsTable();
+            updatePaychecksTab();
             updateStatementsTab();
             updateTransactionsTable();
             updateEnvelopesTable();
@@ -1306,25 +1425,46 @@
         function updateAccountsTable() {
             const tbody = document.getElementById('accountsBody');
             if (ledgerData.accounts.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-title">No accounts yet</div><p>Add your first account to start tracking</p></div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-title">No accounts yet</div><p>Add your first account to start tracking</p></div></td></tr>';
                 return;
             }
-            
+
             const bal = calculateAccountBalances(getYTDTransactions());
-            let accounts = ledgerData.accounts.map(a => ({ ...a, balance: bal[a.id] || 0 }));
+            // Deposits = sum of ABS(paycheck entries) per account for the period
+            // Withdrawals = sum of negative transaction amounts (ABS) per account for the period
+            const paychecks = ledgerData.paychecks || [];
+            const filtTrans = getFilteredTransactions();
+
+            let accounts = ledgerData.accounts.map(a => {
+                const filtPaychecks = selectedMonth
+                    ? paychecks.filter(p => p.accountId === a.id && p.month === selectedMonth)
+                    : paychecks.filter(p => p.accountId === a.id);
+                const deposits = filtPaychecks.reduce((s, p) => s + Math.abs(p.amount), 0);
+                const withdrawals = filtTrans
+                    .filter(t => t.accountId === a.id && t.amount < 0)
+                    .reduce((s, t) => s + Math.abs(t.amount), 0);
+                return { ...a, balance: bal[a.id] || 0, deposits, withdrawals };
+            });
 
             if (sortState.table === 'accounts') {
                 accounts.sort((a, b) => {
-                    let valA = sortState.column === 'name' ? a.name : a.balance;
-                    let valB = sortState.column === 'name' ? b.name : b.balance;
-                    if (typeof valA === 'string') valA = valA.toLowerCase();
-                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    let valA, valB;
+                    if (sortState.column === 'name') { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
+                    else if (sortState.column === 'deposits') { valA = a.deposits; valB = b.deposits; }
+                    else if (sortState.column === 'withdrawals') { valA = a.withdrawals; valB = b.withdrawals; }
+                    else { valA = a.balance; valB = b.balance; }
+                    if (typeof valA === 'string') return sortState.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                     return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
                 });
             }
 
-            tbody.innerHTML = accounts.map(a => 
-                `<tr onclick="openAccountModal('${a.id}')"><td>${escapeHtml(a.name)}</td><td class="amount ${a.balance >= 0 ? 'positive' : 'negative'}">${formatCurrency(a.balance)}</td></tr>`
+            tbody.innerHTML = accounts.map(a =>
+                `<tr onclick="openAccountModal('${a.id}')">
+                    <td>${escapeHtml(a.name)}</td>
+                    <td class="amount positive">${formatCurrency(a.deposits)}</td>
+                    <td class="amount ${a.withdrawals > 0 ? 'negative' : ''}">${a.withdrawals > 0 ? '-' : ''}${formatCurrency(a.withdrawals)}</td>
+                    <td class="amount ${a.balance >= 0 ? 'positive' : 'negative'}">${formatCurrency(a.balance)}</td>
+                </tr>`
             ).join('');
         }
 
@@ -1646,6 +1786,31 @@
                 });
                 envelopesBtn.classList.toggle('tab-incomplete', envNames.length > 0 && anyNegative);
             }
+
+            // Paychecks: incomplete when for any account, net positive != gross positive - total negatives
+            const paychecksBtn = document.querySelector('.tab[onclick="switchTab(\'paychecks\')"]');
+            if (paychecksBtn) {
+                paychecksBtn.classList.toggle('tab-incomplete', !isPaychecksComplete());
+            }
+        }
+
+        function isPaychecksComplete() {
+            const paychecks = ledgerData.paychecks || [];
+            if (paychecks.length === 0) return true;
+            // Check per account (and month if selected)
+            const relevantPaychecks = selectedMonth
+                ? paychecks.filter(p => p.month === selectedMonth)
+                : paychecks;
+            if (relevantPaychecks.length === 0) return true;
+
+            const positiveEntries = relevantPaychecks.filter(p => p.amount > 0);
+            const negativeEntries = relevantPaychecks.filter(p => p.amount < 0);
+            if (positiveEntries.length === 0) return true; // no income entries, nothing to validate
+            const totalNet = positiveEntries.reduce((s, p) => s + p.amount, 0);
+            const totalGross = positiveEntries.reduce((s, p) => s + (p.gross || p.amount), 0);
+            const totalDeductions = negativeEntries.reduce((s, p) => s + Math.abs(p.amount), 0);
+            const expectedNet = totalGross - totalDeductions;
+            return Math.abs(totalNet - expectedNet) < 0.005;
         }
 
         function updateStatementsTab() {
@@ -1790,6 +1955,258 @@
             document.getElementById('confirmModalTitle').textContent = 'Delete Statement';
             document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this statement?</p>';
             document.getElementById('confirmActionBtn').textContent = 'Delete Statement';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        // ─── Paychecks ────────────────────────────────────────────────────────────────
+
+        function updatePaychecksTab() {
+            const tbody = document.getElementById('paychecksBody');
+            if (!tbody) return;
+            const paychecks = ledgerData.paychecks || [];
+            const filtered = selectedMonth
+                ? paychecks.filter(p => p.month === selectedMonth)
+                : paychecks;
+
+            if (filtered.length === 0) {
+                const msg = selectedMonth ? 'No paycheck entries for this month' : 'No paycheck entries yet';
+                const desc = selectedMonth ? 'Add entries or select a different month' : 'Add your first paycheck entry to start tracking';
+                tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">💰</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                return;
+            }
+
+            let sorted = [...filtered];
+            if (sortState.table === 'paychecks') {
+                sorted.sort((a, b) => {
+                    let vA, vB;
+                    if (sortState.column === 'month') { vA = a.month; vB = b.month; }
+                    else if (sortState.column === 'account') {
+                        const accA = ledgerData.accounts.find(x => x.id === a.accountId);
+                        const accB = ledgerData.accounts.find(x => x.id === b.accountId);
+                        vA = accA ? accA.name.toLowerCase() : '';
+                        vB = accB ? accB.name.toLowerCase() : '';
+                    } else { vA = a.amount; vB = b.amount; }
+                    return sortState.direction === 'asc' ? (vA > vB ? 1 : -1) : (vA < vB ? 1 : -1);
+                });
+            } else {
+                sorted.sort((a, b) => a.month !== b.month ? a.month - b.month : (a.amount > 0 ? -1 : 1));
+            }
+
+            tbody.innerHTML = sorted.map(p => {
+                const acc = ledgerData.accounts.find(x => x.id === p.accountId);
+                const accName = acc ? escapeHtml(acc.name) : 'Unknown';
+                const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][p.month - 1] || '';
+                let details = '';
+                if (p.amount > 0) {
+                    const grossStr = p.gross != null ? formatCurrency(p.gross) : '—';
+                    const typeLabel = p.tithingType === 'tithing' ? 'Tithing' : 'Non-Tithing';
+                    details = `Gross: ${grossStr} · ${typeLabel}`;
+                } else {
+                    details = p.envelope ? `<span class="envelope-tag" style="background-color:${getEnvelopeColor(p.envelope)}20;color:${getEnvelopeColor(p.envelope)};">${escapeHtml(p.envelope)}</span>` : '—';
+                }
+                return `<tr onclick="openPaycheckModal('${p.id}')">
+                    <td>${monthName}</td>
+                    <td>${accName}</td>
+                    <td class="amount ${p.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(p.amount)}</td>
+                    <td>${details}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function getEnvelopeColor(name) {
+            return (ledgerData.envelopes[name] && ledgerData.envelopes[name].color) || '#2D5F3F';
+        }
+
+        function openPaycheckModal(paycheckId = null) {
+            if (ledgerData.accounts.length === 0) return showMessage('Please add an account first', 'error');
+
+            // Populate account select
+            const accountOpts = '<option value="">Select account...</option>' +
+                ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+            document.getElementById('paycheckAccount').innerHTML = accountOpts;
+
+            // Populate envelope select
+            const envOpts = '<option value="">Select envelope...</option>' +
+                Object.keys(ledgerData.envelopes || {}).sort().map(e => `<option value="${e}">${escapeHtml(e)}</option>`).join('');
+            document.getElementById('paycheckEnvelope').innerHTML = envOpts;
+
+            if (paycheckId) {
+                const p = (ledgerData.paychecks || []).find(x => x.id === paycheckId);
+                if (p) {
+                    const isPositive = p.amount >= 0;
+                    document.getElementById('paycheckModalTitle').textContent = isPositive ? 'Edit Income Entry' : 'Edit Deduction Entry';
+                    document.getElementById('paycheckId').value = p.id;
+                    document.getElementById('paycheckSign').value = isPositive ? 'positive' : 'negative';
+                    document.getElementById('paycheckMonth').value = p.month;
+                    document.getElementById('paycheckAccount').value = p.accountId;
+                    document.getElementById('paycheckAmount').value = Math.abs(p.amount);
+                    document.getElementById('paycheckAmountLabel').textContent = isPositive ? 'Net Amount' : 'Deduction Amount';
+                    document.getElementById('paycheckAmountHint').textContent = isPositive ? 'The take-home (net) pay amount.' : 'Enter as a positive number.';
+                    document.getElementById('deletePaycheckBtn').style.display = 'block';
+                    // Hide type toggle when editing — sign is locked
+                    document.getElementById('paycheckTypeToggleGroup').style.display = 'none';
+
+                    if (isPositive) {
+                        document.getElementById('paycheckGross').value = p.gross != null ? p.gross : '';
+                        document.getElementById('paycheckTithingType').value = p.tithingType || 'tithing';
+                        document.getElementById('paycheckPositiveFields').style.display = 'block';
+                        document.getElementById('paycheckNegativeFields').style.display = 'none';
+                    } else {
+                        document.getElementById('paycheckEnvelope').value = p.envelope || '';
+                        document.getElementById('paycheckPositiveFields').style.display = 'none';
+                        document.getElementById('paycheckNegativeFields').style.display = 'block';
+                    }
+                }
+            } else {
+                document.getElementById('paycheckModalTitle').textContent = 'Add Income Entry';
+                document.getElementById('paycheckId').value = '';
+                document.getElementById('paycheckSign').value = 'positive';
+                document.getElementById('paycheckForm').reset();
+                document.getElementById('paycheckSign').value = 'positive'; // reset() clears hidden fields
+                document.getElementById('paycheckAmountLabel').textContent = 'Net Amount';
+                document.getElementById('paycheckAmountHint').textContent = 'The take-home (net) pay amount. For deductions, switch type above.';
+                document.getElementById('deletePaycheckBtn').style.display = 'none';
+                document.getElementById('paycheckPositiveFields').style.display = 'block';
+                document.getElementById('paycheckNegativeFields').style.display = 'none';
+                document.getElementById('paycheckTypeToggleGroup').style.display = 'block';
+                document.getElementById('paycheckTypeIncome').classList.add('active');
+                document.getElementById('paycheckTypeDeduction').classList.remove('active');
+                if (selectedMonth) document.getElementById('paycheckMonth').value = selectedMonth;
+            }
+
+            document.getElementById('paycheckModal').classList.add('active');
+            setTimeout(() => document.getElementById('paycheckMonth').focus(), 100);
+        }
+
+        function switchPaycheckType(type) {
+            document.getElementById('paycheckSign').value = type;
+            document.getElementById('paycheckTypeIncome').classList.toggle('active', type === 'positive');
+            document.getElementById('paycheckTypeDeduction').classList.toggle('active', type === 'negative');
+            if (type === 'positive') {
+                document.getElementById('paycheckModalTitle').textContent = 'Add Income Entry';
+                document.getElementById('paycheckAmountLabel').textContent = 'Net Amount';
+                document.getElementById('paycheckAmountHint').textContent = 'The take-home (net) pay amount.';
+                document.getElementById('paycheckPositiveFields').style.display = 'block';
+                document.getElementById('paycheckNegativeFields').style.display = 'none';
+            } else {
+                document.getElementById('paycheckModalTitle').textContent = 'Add Deduction Entry';
+                document.getElementById('paycheckAmountLabel').textContent = 'Deduction Amount';
+                document.getElementById('paycheckAmountHint').textContent = 'Enter as a positive number; will be stored as negative.';
+                document.getElementById('paycheckPositiveFields').style.display = 'none';
+                document.getElementById('paycheckNegativeFields').style.display = 'block';
+            }
+        }
+
+        function closePaycheckModal() {
+            document.getElementById('paycheckModal').classList.remove('active');
+        }
+
+        function savePaycheck() {
+            const id = document.getElementById('paycheckId').value;
+            const sign = document.getElementById('paycheckSign').value;
+            const month = parseInt(document.getElementById('paycheckMonth').value);
+            const accountId = document.getElementById('paycheckAccount').value;
+            const absAmount = parseFloat(document.getElementById('paycheckAmount').value);
+
+            if (!month || !accountId || isNaN(absAmount) || absAmount <= 0) {
+                return showMessage('Please fill in all required fields with valid values', 'error');
+            }
+
+            const amount = sign === 'negative' ? -absAmount : absAmount;
+
+            if (!ledgerData.paychecks) ledgerData.paychecks = [];
+
+            if (sign === 'negative') {
+                const envelope = document.getElementById('paycheckEnvelope').value;
+                if (!envelope) return showMessage('Please select an envelope for this deduction', 'error');
+
+                if (id) {
+                    const p = ledgerData.paychecks.find(x => x.id === id);
+                    if (p) {
+                        p.month = month; p.accountId = accountId; p.amount = amount; p.envelope = envelope;
+                        // Update linked transaction
+                        paycheckUpdateLinkedTransaction(p);
+                    }
+                } else {
+                    const newId = Date.now().toString();
+                    const txId = paycheckCreateLinkedTransaction(newId, month, accountId, amount, envelope);
+                    ledgerData.paychecks.push({ id: newId, month, accountId, amount, envelope, linkedTransactionId: txId });
+                }
+            } else {
+                const gross = parseFloat(document.getElementById('paycheckGross').value) || null;
+                const tithingType = document.getElementById('paycheckTithingType').value;
+
+                if (id) {
+                    const p = ledgerData.paychecks.find(x => x.id === id);
+                    if (p) { p.month = month; p.accountId = accountId; p.amount = amount; p.gross = gross; p.tithingType = tithingType; }
+                } else {
+                    ledgerData.paychecks.push({ id: Date.now().toString(), month, accountId, amount, gross, tithingType });
+                }
+            }
+
+            markUnsaved();
+            updateUI();
+            closePaycheckModal();
+            showMessage(id ? 'Paycheck entry updated!' : 'Paycheck entry added!');
+        }
+
+        // Create a linked transaction for a negative paycheck entry. Returns the transaction id.
+        function paycheckCreateLinkedTransaction(paycheckId, month, accountId, amount, envelope) {
+            const txId = 'paycheck-tx-' + paycheckId;
+            const account = ledgerData.accounts.find(a => a.id === accountId);
+            const accountName = account ? account.name : 'Account';
+            // Use a representative date (1st of the month, current year)
+            const year = new Date().getFullYear();
+            const dateStr = `${year}-${String(month).padStart(2,'0')}-01`;
+            ledgerData.transactions.push({
+                id: txId,
+                date: dateStr,
+                month,
+                accountId,
+                amount,  // negative
+                description: `Paycheck deduction`,
+                envelope,
+                paycheckManaged: true
+            });
+            return txId;
+        }
+
+        // Update the linked transaction when a negative paycheck entry is edited.
+        function paycheckUpdateLinkedTransaction(paycheckEntry) {
+            const txId = paycheckEntry.linkedTransactionId;
+            if (!txId) return;
+            const tx = ledgerData.transactions.find(t => t.id === txId);
+            if (tx) {
+                tx.month = paycheckEntry.month;
+                tx.accountId = paycheckEntry.accountId;
+                tx.amount = paycheckEntry.amount;
+                tx.envelope = paycheckEntry.envelope;
+                const year = new Date().getFullYear();
+                tx.date = `${year}-${String(paycheckEntry.month).padStart(2,'0')}-01`;
+            }
+        }
+
+        // Delete a paycheck entry and its linked transaction (if any).
+        function paycheckDeleteAndCleanup(paycheckId) {
+            const p = (ledgerData.paychecks || []).find(x => x.id === paycheckId);
+            if (p && p.linkedTransactionId) {
+                ledgerData.transactions = ledgerData.transactions.filter(t => t.id !== p.linkedTransactionId);
+            }
+            ledgerData.paychecks = (ledgerData.paychecks || []).filter(x => x.id !== paycheckId);
+        }
+
+        function confirmDeletePaycheck() {
+            const id = document.getElementById('paycheckId').value;
+            if (!id) return;
+            const p = (ledgerData.paychecks || []).find(x => x.id === id);
+            const isNeg = p && p.amount < 0;
+            pendingAction = { type: 'deletePaycheck', id };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Paycheck Entry';
+            document.getElementById('confirmModalBody').innerHTML = isNeg
+                ? '<p>Are you sure? This will also delete the linked transaction.</p>'
+                : '<p>Are you sure you want to delete this paycheck entry?</p>';
+            document.getElementById('confirmActionBtn').textContent = 'Delete';
             document.getElementById('confirmActionBtn').className = 'danger';
             document.getElementById('confirmModal').classList.add('active');
         }
