@@ -128,12 +128,16 @@
             <section>
                 <div class="section-header">
                     <h2 class="section-title">Paychecks</h2>
-                    <button onclick="openPaycheckModal()">+ Add Entry</button>
+                    <div class="action-row">
+                        <button onclick="importCSVFor('paychecks')" class="secondary">Import CSV</button>
+                        <button onclick="openPaycheckModal()">+ Add Entry</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllPaychecks" onchange="toggleSelectAll('paychecks')"></th>
                                 <th class="sortable" onclick="sortTable('paychecks', 'month')">Month</th>
                                 <th class="sortable" onclick="sortTable('paychecks', 'account')">Account</th>
                                 <th class="sortable" style="text-align: right;" onclick="sortTable('paychecks', 'amount')">Amount</th>
@@ -143,6 +147,12 @@
                         <tbody id="paychecksBody"></tbody>
                     </table>
                 </div>
+                <div id="paychecksSelectionBar" class="selection-bar" style="display: none;">
+                    <div class="selection-info">
+                        <strong><span id="paychecksSelectionCount">0</span> selected</strong> | Total: <strong><span id="paychecksSelectionSum">$0.00</span></strong>
+                    </div>
+                    <button onclick="confirmDeleteSelectedItems('paychecks')" class="danger">Delete Selected</button>
+                </div>
             </section>
         </div>
 
@@ -150,7 +160,10 @@
             <section>
                 <div class="section-header">
                     <h2 class="section-title">Statements</h2>
-                    <button onclick="openStatementModal()">+ Add Statement</button>
+                    <div class="action-row">
+                        <button onclick="importCSVFor('statements')" class="secondary">Import CSV</button>
+                        <button onclick="openStatementModal()">+ Add Statement</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -175,7 +188,10 @@
             <section>
                 <div class="section-header">
                     <h2 class="section-title">Envelopes</h2>
-                    <button onclick="openEnvelopeModal()">+ Add Envelope</button>
+                    <div class="action-row">
+                        <button onclick="importCSVFor('envelopes')" class="secondary">Import CSV</button>
+                        <button onclick="openEnvelopeModal()">+ Add Envelope</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -198,7 +214,7 @@
                 <div class="section-header">
                     <h2 class="section-title">Transactions</h2>
                     <div class="action-row">
-                        <button onclick="importCSV()" class="secondary">Import CSV</button>
+                        <button onclick="importCSVFor('transactions')" class="secondary">Import CSV</button>
                         <button onclick="openTransactionModal()" class="secondary">+ Add Transaction</button>
                         <button onclick="openTransferModal()" class="secondary">↔ Transfer</button>
                     </div>
@@ -207,7 +223,7 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width: 40px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllTransactions" onchange="toggleSelectAll('transactions')"></th>
                                 <th class="sortable" onclick="sortTable('transactions', 'date')">Date</th>
                                 <th class="sortable" onclick="sortTable('transactions', 'month')">Month</th>
                                 <th class="sortable" onclick="sortTable('transactions', 'account')">Account</th>
@@ -219,11 +235,11 @@
                         <tbody id="transactionsBody"></tbody>
                     </table>
                 </div>
-                <div id="selectionBar" class="selection-bar" style="display: none;">
+                <div id="transactionsSelectionBar" class="selection-bar" style="display: none;">
                     <div class="selection-info">
-                        <strong><span id="selectionCount">0</span> selected</strong> | Total: <strong><span id="selectionSum">$0.00</span></strong>
+                        <strong><span id="transactionsSelectionCount">0</span> selected</strong> | Total: <strong><span id="transactionsSelectionSum">$0.00</span></strong>
                     </div>
-                    <button onclick="confirmDeleteSelected()" class="danger">Delete Selected</button>
+                    <button onclick="confirmDeleteSelectedItems('transactions')" class="danger">Delete Selected</button>
                 </div>
             </section>
         </div>
@@ -683,8 +699,9 @@
         let selectedEnvelopeColor = '#2D5F3F';
         let envelopeModalColor = '#2D5F3F';
         let sortState = { table: null, column: null, direction: 'asc' };
-        let selectedTransactions = new Set();
-        let lastSelectedIndex = -1;
+        // Generic multiselect state: keyed by context ('transactions' | 'paychecks')
+        let selectedItems = { transactions: new Set(), paychecks: new Set() };
+        let lastSelectedIndex = { transactions: -1, paychecks: -1 };
         let pendingAction = null;
 
         function init() {
@@ -725,27 +742,34 @@
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'ArrowUp' && e.shiftKey) {
                     e.preventDefault();
-                    moveSelection(-1);
+                    const ctx = getActiveSelectionContext();
+                    if (ctx) moveSelection(ctx, -1);
                 } else if (e.key === 'ArrowDown' && e.shiftKey) {
                     e.preventDefault();
-                    moveSelection(1);
+                    const ctx = getActiveSelectionContext();
+                    if (ctx) moveSelection(ctx, 1);
                 }
             });
         }
 
-        function moveSelection(direction) {
-            const rows = Array.from(document.querySelectorAll('#transactionsBody tr'));
-            if (rows.length === 0 || lastSelectedIndex === -1) return;
-            
-            const newIndex = Math.max(0, Math.min(rows.length - 1, lastSelectedIndex + direction));
+        function getActiveSelectionContext() {
+            if (document.getElementById('transactionsTab').classList.contains('active')) return 'transactions';
+            if (document.getElementById('paychecksTab').classList.contains('active')) return 'paychecks';
+            return null;
+        }
+
+        function moveSelection(ctx, direction) {
+            const bodyId = ctx === 'transactions' ? 'transactionsBody' : 'paychecksBody';
+            const rows = Array.from(document.querySelectorAll(`#${bodyId} tr`));
+            if (rows.length === 0 || lastSelectedIndex[ctx] === -1) return;
+            const newIndex = Math.max(0, Math.min(rows.length - 1, lastSelectedIndex[ctx] + direction));
             const row = rows[newIndex];
             const checkbox = row.querySelector('input[type="checkbox"]');
             if (checkbox) {
                 checkbox.checked = true;
-                const transId = checkbox.dataset.id;
-                selectedTransactions.add(transId);
-                lastSelectedIndex = newIndex;
-                updateSelectionUI();
+                selectedItems[ctx].add(checkbox.dataset.id);
+                lastSelectedIndex[ctx] = newIndex;
+                updateSelectionUI(ctx);
             }
         }
 
@@ -852,140 +876,252 @@
             }
         }
 
-        function importCSV() {
+        // ─── Unified CSV Import ───────────────────────────────────────────────────────
+
+        // Entry point: open a file picker then route to the right parser
+        function importCSVFor(ctx) {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.csv';
             input.onchange = (e) => {
                 const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        try {
-                            parseCSV(event.target.result);
-                        } catch (error) {
-                            showMessage('Error parsing CSV: ' + error.message, 'error');
-                        }
-                    };
-                    reader.readAsText(file);
-                }
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try { parseCSVFor(ctx, ev.target.result); }
+                    catch (err) { showMessage('Error parsing CSV: ' + err.message, 'error'); }
+                };
+                reader.readAsText(file);
             };
             input.click();
         }
 
-        function parseCSV(text) {
-            const lines = text.trim().split('\n');
-            if (lines.length < 2) {
-                showMessage('CSV file is empty or invalid', 'error');
-                return;
-            }
-
-            const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-            const requiredFields = ['date', 'account', 'amount', 'description'];
-            const missing = requiredFields.filter(f => !header.includes(f));
-            
-            if (missing.length > 0) {
-                showMessage('CSV missing required columns: ' + missing.join(', '), 'error');
-                return;
-            }
-
-            const newTransactions = [];
-            const newAccounts = new Set();
-            const newEnvelopes = new Set();
-
+        function parseCSVRows(text) {
+            // Returns { header: string[], rows: object[] }
+            const lines = text.trim().split('\n').filter(l => l.trim());
+            if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+            const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+            const rows = [];
             for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(',').map(v => v.trim());
-                if (values.length < header.length) continue;
-
+                // Simple split — handles quoted fields containing commas
+                const values = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)
+                    .map(v => v.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+                if (values.every(v => v === '')) continue;
                 const row = {};
-                header.forEach((col, idx) => row[col] = values[idx]);
+                header.forEach((col, idx) => { row[col] = (values[idx] || '').trim(); });
+                rows.push(row);
+            }
+            return { header, rows };
+        }
 
+        function parseCSVFor(ctx, text) {
+            const { header, rows } = parseCSVRows(text);
+
+            if (ctx === 'transactions') {
+                parseTransactionsCSV(header, rows);
+            } else if (ctx === 'paychecks') {
+                parsePaychecksCSV(header, rows);
+            } else if (ctx === 'envelopes') {
+                parseEnvelopesCSV(header, rows);
+            } else if (ctx === 'statements') {
+                parseStatementsCSV(header, rows);
+            }
+        }
+
+        // ── Transactions CSV ──────────────────────────────────────────────────────────
+        // Required: date, account, amount, description  Optional: month, envelope
+        function parseTransactionsCSV(header, rows) {
+            const required = ['date', 'account', 'amount', 'description'];
+            const missing = required.filter(f => !header.includes(f));
+            if (missing.length) return showMessage('Transactions CSV missing columns: ' + missing.join(', '), 'error');
+
+            const newTransactions = [], newAccounts = new Set(), newEnvelopes = new Set();
+            rows.forEach(row => {
                 const account = row.account;
                 const envelope = row.envelope || '';
-                const month = row.month ? parseInt(row.month) : new Date(row.date).getMonth() + 1;
+                const month = row.month ? parseInt(row.month) : new Date(row.date + 'T00:00:00').getMonth() + 1;
+                if (!ledgerData.accounts.find(a => a.name === account)) newAccounts.add(account);
+                if (envelope && !ledgerData.envelopes[envelope]) newEnvelopes.add(envelope);
+                newTransactions.push({ date: row.date, month, account, amount: parseFloat(row.amount), description: row.description, envelope });
+            });
 
-                if (!ledgerData.accounts.find(a => a.name === account)) {
-                    newAccounts.add(account);
-                }
+            const newItems = [];
+            if (newAccounts.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (newEnvelopes.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>${[...newEnvelopes].map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul></div>`);
 
-                if (envelope && !ledgerData.envelopes[envelope]) {
-                    newEnvelopes.add(envelope);
-                }
+            const body = (newItems.length ? '<p>The CSV contains the following new items:</p>' + newItems.join('') : '') +
+                `<p>Import <strong>${newTransactions.length}</strong> transaction(s)?</p>`;
 
-                newTransactions.push({
-                    date: row.date,
-                    month: month,
-                    account: account,
-                    amount: parseFloat(row.amount),
-                    description: row.description,
-                    envelope: envelope
+            showImportConfirm('Import Transactions', body, () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                [...newEnvelopes].forEach(name => { if (!ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} }; });
+                newTransactions.forEach(t => {
+                    const acc = ledgerData.accounts.find(a => a.name === t.account);
+                    if (acc) ledgerData.transactions.push({ id: Date.now().toString() + Math.random(), date: t.date, month: t.month, accountId: acc.id, amount: t.amount, description: t.description, envelope: t.envelope });
                 });
-            }
-
-            if (newAccounts.size > 0 || newEnvelopes.size > 0) {
-                showImportConfirmModal(newTransactions, Array.from(newAccounts), Array.from(newEnvelopes));
-            } else {
-                finishImport(newTransactions, [], []);
-            }
+                markUnsaved(); updateUI();
+                showMessage(`Imported ${newTransactions.length} transaction(s)`);
+            });
         }
 
-        function showImportConfirmModal(transactions, accounts, envelopes) {
-            pendingAction = { type: 'import', transactions, accounts, envelopes };
-            
-            let html = '<p>The CSV contains the following new items:</p>';
-            
-            if (accounts.length > 0) {
-                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>';
-                accounts.forEach(a => html += `<li>${escapeHtml(a)}</li>`);
-                html += '</ul></div>';
-            }
+        // ── Paychecks CSV ─────────────────────────────────────────────────────────────
+        // Required: month, account, amount  Optional: gross, tithing_type, envelope
+        // Positive amount → income entry; negative → deduction (envelope required)
+        function parsePaychecksCSV(header, rows) {
+            const required = ['month', 'account', 'amount'];
+            const missing = required.filter(f => !header.includes(f));
+            if (missing.length) return showMessage('Paychecks CSV missing columns: ' + missing.join(', '), 'error');
 
-            if (envelopes.length > 0) {
-                html += '<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>';
-                envelopes.forEach(e => html += `<li>${escapeHtml(e)}</li>`);
-                html += '</ul></div>';
-            }
+            const newEntries = [], newAccounts = new Set(), newEnvelopes = new Set(), errors = [];
+            rows.forEach((row, i) => {
+                const account = row.account;
+                const amount = parseFloat(row.amount);
+                const month = parseInt(row.month);
+                if (isNaN(amount) || isNaN(month)) { errors.push(`Row ${i+2}: invalid amount or month`); return; }
+                if (!ledgerData.accounts.find(a => a.name === account)) newAccounts.add(account);
+                const envelope = row.envelope || '';
+                if (amount < 0 && !envelope) { errors.push(`Row ${i+2}: deduction entry requires an envelope`); return; }
+                if (envelope && !ledgerData.envelopes[envelope]) newEnvelopes.add(envelope);
+                newEntries.push({ month, account, amount, gross: row.gross ? parseFloat(row.gross) : null, tithingType: row.tithing_type || row.tithingtype || 'tithing', envelope });
+            });
 
-            html += `<p>Import ${transactions.length} transaction(s)?</p>`;
+            if (errors.length) return showMessage('CSV errors:\n' + errors.join('\n'), 'error');
 
-            document.getElementById('confirmModalTitle').textContent = 'Confirm Import';
-            document.getElementById('confirmModalBody').innerHTML = html;
+            const newItems = [];
+            if (newAccounts.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts:</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (newEnvelopes.size) newItems.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Envelopes:</div><ul>${[...newEnvelopes].map(e=>`<li>${escapeHtml(e)}</li>`).join('')}</ul></div>`);
+
+            const body = (newItems.length ? '<p>The CSV contains the following new items:</p>' + newItems.join('') : '') +
+                `<p>Import <strong>${newEntries.length}</strong> paycheck entr(ies)?</p>`;
+
+            showImportConfirm('Import Paycheck Entries', body, () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                [...newEnvelopes].forEach(name => { if (!ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} }; });
+                newEntries.forEach(e => {
+                    const acc = ledgerData.accounts.find(a => a.name === e.account);
+                    if (!acc) return;
+                    if (!ledgerData.paychecks) ledgerData.paychecks = [];
+                    const newId = Date.now().toString() + Math.random();
+                    if (e.amount < 0) {
+                        const txId = paycheckCreateLinkedTransaction(newId, e.month, acc.id, e.amount, e.envelope);
+                        ledgerData.paychecks.push({ id: newId, month: e.month, accountId: acc.id, amount: e.amount, envelope: e.envelope, linkedTransactionId: txId });
+                    } else {
+                        ledgerData.paychecks.push({ id: newId, month: e.month, accountId: acc.id, amount: e.amount, gross: e.gross, tithingType: e.tithingType });
+                    }
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Imported ${newEntries.length} paycheck entr(ies)`);
+            });
+        }
+
+        // ── Envelopes CSV ─────────────────────────────────────────────────────────────
+        // Required: name  Optional: color, funding_<month> (e.g. funding_1, funding_3)
+        // Upsert: if envelope name exists, update its color and any provided funding months
+        function parseEnvelopesCSV(header, rows) {
+            if (!header.includes('name')) return showMessage('Envelopes CSV missing required column: name', 'error');
+
+            const toAdd = [], toUpdate = [];
+            rows.forEach(row => {
+                const name = row.name;
+                if (!name) return;
+                const color = row.color || '#2D5F3F';
+                // Extract any funding_N columns
+                const funding = {};
+                header.forEach(col => {
+                    const m = col.match(/^funding_(\d+)$/);
+                    if (m && row[col] !== '' && row[col] !== undefined) {
+                        funding[parseInt(m[1])] = parseFloat(row[col]) || 0;
+                    }
+                });
+                if (ledgerData.envelopes[name]) toUpdate.push({ name, color, funding });
+                else toAdd.push({ name, color, funding });
+            });
+
+            const parts = [];
+            if (toAdd.length) parts.push(`Add <strong>${toAdd.length}</strong> new envelope(s): ${toAdd.map(e=>escapeHtml(e.name)).join(', ')}`);
+            if (toUpdate.length) parts.push(`Update <strong>${toUpdate.length}</strong> existing envelope(s): ${toUpdate.map(e=>escapeHtml(e.name)).join(', ')}`);
+            if (!parts.length) return showMessage('No valid envelope rows found in CSV', 'error');
+
+            showImportConfirm('Import Envelopes', '<p>' + parts.join('<br>') + '</p>', () => {
+                toAdd.forEach(e => {
+                    ledgerData.envelopes[e.name] = { color: e.color, funding: e.funding };
+                });
+                toUpdate.forEach(e => {
+                    ledgerData.envelopes[e.name].color = e.color;
+                    if (!ledgerData.envelopes[e.name].funding) ledgerData.envelopes[e.name].funding = {};
+                    Object.assign(ledgerData.envelopes[e.name].funding, e.funding);
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Processed ${toAdd.length + toUpdate.length} envelope(s) (${toAdd.length} added, ${toUpdate.length} updated)`);
+            });
+        }
+
+        // ── Statements CSV ────────────────────────────────────────────────────────────
+        // Required: account, month, start_balance, end_balance, deposits, withdrawals
+        // Optional: start_date, end_date
+        // Upsert: if statement for account+month exists, update it
+        function parseStatementsCSV(header, rows) {
+            const required = ['account', 'month', 'start_balance', 'end_balance', 'deposits', 'withdrawals'];
+            const missing = required.filter(f => !header.includes(f));
+            if (missing.length) return showMessage('Statements CSV missing columns: ' + missing.join(', '), 'error');
+
+            const toAdd = [], toUpdate = [], newAccounts = new Set(), errors = [];
+            rows.forEach((row, i) => {
+                const accountName = row.account;
+                const month = parseInt(row.month);
+                if (isNaN(month) || month < 1 || month > 12) { errors.push(`Row ${i+2}: invalid month`); return; }
+                const acc = ledgerData.accounts.find(a => a.name === accountName);
+                if (!acc) { newAccounts.add(accountName); }
+                const s = {
+                    accountName,
+                    accountId: acc ? acc.id : null,
+                    month,
+                    startDate: row.start_date || row.startdate || '',
+                    endDate: row.end_date || row.enddate || '',
+                    startBalance: parseFloat(row.start_balance) || 0,
+                    endBalance: parseFloat(row.end_balance) || 0,
+                    deposits: parseFloat(row.deposits) || 0,
+                    withdrawals: parseFloat(row.withdrawals) || 0,
+                };
+                const existing = acc ? (ledgerData.statements || []).find(x => x.accountId === acc.id && x.month === month) : null;
+                if (existing) toUpdate.push({ ...s, existingId: existing.id });
+                else toAdd.push(s);
+            });
+
+            if (errors.length) return showMessage('CSV errors:\n' + errors.join('\n'), 'error');
+
+            const parts = [];
+            if (newAccounts.size) parts.push(`<div class="confirmation-list"><div class="confirmation-list-title">New Accounts (will be created):</div><ul>${[...newAccounts].map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></div>`);
+            if (toAdd.length) parts.push(`<p>Add <strong>${toAdd.length}</strong> new statement(s)</p>`);
+            if (toUpdate.length) parts.push(`<p>Update <strong>${toUpdate.length}</strong> existing statement(s)</p>`);
+            if (!parts.length) return showMessage('No valid statement rows found', 'error');
+
+            showImportConfirm('Import Statements', parts.join(''), () => {
+                [...newAccounts].forEach(name => ledgerData.accounts.push({ id: Date.now().toString() + Math.random(), name, initialBalance: 0 }));
+                if (!ledgerData.statements) ledgerData.statements = [];
+                [...toAdd, ...toUpdate].forEach(s => {
+                    const acc = ledgerData.accounts.find(a => a.name === s.accountName);
+                    if (!acc) return;
+                    if (s.existingId) {
+                        const existing = ledgerData.statements.find(x => x.id === s.existingId);
+                        if (existing) Object.assign(existing, { accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
+                    } else {
+                        ledgerData.statements.push({ id: Date.now().toString() + Math.random(), accountId: acc.id, month: s.month, startDate: s.startDate, endDate: s.endDate, startBalance: s.startBalance, endBalance: s.endBalance, deposits: s.deposits, withdrawals: s.withdrawals });
+                    }
+                });
+                markUnsaved(); updateUI();
+                showMessage(`Processed ${toAdd.length + toUpdate.length} statement(s) (${toAdd.length} added, ${toUpdate.length} updated)`);
+            });
+        }
+
+        // ── Shared confirm helper ─────────────────────────────────────────────────────
+        function showImportConfirm(title, bodyHtml, onConfirm) {
+            pendingAction = { type: 'importGeneric', onConfirm };
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalBody').innerHTML = bodyHtml;
             document.getElementById('confirmActionBtn').textContent = 'Confirm Import';
+            document.getElementById('confirmActionBtn').className = '';
             document.getElementById('confirmModal').classList.add('active');
-        }
-
-        function finishImport(transactions, accounts, envelopes) {
-            accounts.forEach(name => {
-                ledgerData.accounts.push({
-                    id: Date.now().toString() + Math.random(),
-                    name: name,
-                    initialBalance: 0
-                });
-            });
-
-            envelopes.forEach(name => {
-                if (!ledgerData.envelopes[name]) {
-                    ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} };
-                }
-            });
-
-            transactions.forEach(t => {
-                const account = ledgerData.accounts.find(a => a.name === t.account);
-                if (account) {
-                    ledgerData.transactions.push({
-                        id: Date.now().toString() + Math.random(),
-                        date: t.date,
-                        month: t.month,
-                        accountId: account.id,
-                        amount: t.amount,
-                        description: t.description,
-                        envelope: t.envelope
-                    });
-                }
-            });
-
-            updateUI();
-            showMessage(`Imported ${transactions.length} transaction(s)`);
         }
 
         function confirmDeleteAccount() {
@@ -1012,17 +1148,6 @@
             document.getElementById('confirmModal').classList.add('active');
         }
 
-        function confirmDeleteSelected() {
-            if (selectedTransactions.size === 0) return;
-            
-            pendingAction = { type: 'deleteSelected' };
-            document.getElementById('confirmModalTitle').textContent = 'Delete Selected';
-            document.getElementById('confirmModalBody').innerHTML = `<p>Are you sure you want to delete ${selectedTransactions.size} selected transaction(s)?</p>`;
-            document.getElementById('confirmActionBtn').textContent = 'Delete Selected';
-            document.getElementById('confirmActionBtn').className = 'danger';
-            document.getElementById('confirmModal').classList.add('active');
-        }
-
         function closeConfirmModal() {
             document.getElementById('confirmModal').classList.remove('active');
             document.getElementById('confirmActionBtn').className = '';
@@ -1033,8 +1158,8 @@
             if (!pendingAction) return;
 
             switch (pendingAction.type) {
-                case 'import':
-                    finishImport(pendingAction.transactions, pendingAction.accounts, pendingAction.envelopes);
+                case 'importGeneric':
+                    pendingAction.onConfirm();
                     break;
                 case 'deleteAccount':
                     ledgerData.accounts = ledgerData.accounts.filter(a => a.id !== pendingAction.id);
@@ -1053,12 +1178,19 @@
                     showMessage('Transaction deleted successfully!');
                     break;
                 case 'deleteSelected':
-                    ledgerData.transactions = ledgerData.transactions.filter(t => !selectedTransactions.has(t.id));
-                    selectedTransactions.clear();
-                    lastSelectedIndex = -1;
+                    if (pendingAction.ctx === 'transactions') {
+                        ledgerData.transactions = ledgerData.transactions.filter(t => !selectedItems.transactions.has(t.id));
+                        selectedItems.transactions.clear();
+                        lastSelectedIndex.transactions = -1;
+                    } else {
+                        // For paychecks: also clean up linked transactions
+                        Array.from(selectedItems.paychecks).forEach(id => paycheckDeleteAndCleanup(id));
+                        selectedItems.paychecks.clear();
+                        lastSelectedIndex.paychecks = -1;
+                    }
                     markUnsaved();
                     updateUI();
-                    showMessage('Selected transactions deleted successfully!');
+                    showMessage('Selected items deleted successfully!');
                     break;
                 case 'deleteStatement':
                     ledgerData.statements = (ledgerData.statements || []).filter(s => s.id !== pendingAction.id);
@@ -1261,94 +1393,87 @@
             showMessage('Transfer added successfully!');
         }
 
-        function toggleSelectAll() {
-            const checked = document.getElementById('selectAll').checked;
-            document.querySelectorAll('#transactionsBody input[type="checkbox"]').forEach(cb => {
+        // ─── Generic Multiselect ──────────────────────────────────────────────────────
+
+        function toggleSelectAll(ctx) {
+            const bodyId = ctx === 'transactions' ? 'transactionsBody' : 'paychecksBody';
+            const selectAllId = ctx === 'transactions' ? 'selectAllTransactions' : 'selectAllPaychecks';
+            const checked = document.getElementById(selectAllId).checked;
+            document.querySelectorAll(`#${bodyId} input[type="checkbox"]`).forEach(cb => {
                 cb.checked = checked;
-                if (checked) {
-                    selectedTransactions.add(cb.dataset.id);
-                } else {
-                    selectedTransactions.delete(cb.dataset.id);
-                }
+                if (checked) selectedItems[ctx].add(cb.dataset.id);
+                else selectedItems[ctx].delete(cb.dataset.id);
             });
-            updateSelectionUI();
+            updateSelectionUI(ctx);
         }
 
-        function toggleTransaction(id, index, event) {
-            if (event.target.type === 'checkbox') {
-                if (event.target.checked) {
-                    selectedTransactions.add(id);
-                } else {
-                    selectedTransactions.delete(id);
-                }
-                lastSelectedIndex = index;
-                updateSelectionUI();
-                return;
-            }
-
-            // Clicked on row - open edit modal
-            openTransactionModal(id);
-        }
-
-        function handleTransactionClick(id, index, event) {
-            // Stop propagation for checkbox clicks
+        function handleRowClick(ctx, id, index, event) {
             if (event.target.type === 'checkbox') {
                 event.stopPropagation();
                 const checkbox = event.target;
-                
-                if (event.shiftKey && lastSelectedIndex !== -1 && lastSelectedIndex !== index) {
-                    const start = Math.min(lastSelectedIndex, index);
-                    const end = Math.max(lastSelectedIndex, index);
-                    const rows = document.querySelectorAll('#transactionsBody tr');
+                if (event.shiftKey && lastSelectedIndex[ctx] !== -1 && lastSelectedIndex[ctx] !== index) {
+                    const bodyId = ctx === 'transactions' ? 'transactionsBody' : 'paychecksBody';
+                    const start = Math.min(lastSelectedIndex[ctx], index);
+                    const end = Math.max(lastSelectedIndex[ctx], index);
+                    const rows = document.querySelectorAll(`#${bodyId} tr`);
                     for (let i = start; i <= end; i++) {
                         const cb = rows[i].querySelector('input[type="checkbox"]');
-                        if (cb) {
-                            cb.checked = true;
-                            selectedTransactions.add(cb.dataset.id);
-                        }
+                        if (cb) { cb.checked = true; selectedItems[ctx].add(cb.dataset.id); }
                     }
                 } else {
-                    if (checkbox.checked) {
-                        selectedTransactions.add(id);
-                    } else {
-                        selectedTransactions.delete(id);
-                    }
+                    if (checkbox.checked) selectedItems[ctx].add(id);
+                    else selectedItems[ctx].delete(id);
                 }
-                
-                lastSelectedIndex = index;
-                updateSelectionUI();
+                lastSelectedIndex[ctx] = index;
+                updateSelectionUI(ctx);
                 return;
             }
-
-            // Clicked on row - open edit modal
-            openTransactionModal(id);
+            // Row click → open modal
+            if (ctx === 'transactions') openTransactionModal(id);
+            else openPaycheckModal(id);
         }
 
-        function updateSelectionUI() {
-            const count = selectedTransactions.size;
-            
+        function updateSelectionUI(ctx) {
+            const bodyId = ctx === 'transactions' ? 'transactionsBody' : 'paychecksBody';
+            const barId = ctx === 'transactions' ? 'transactionsSelectionBar' : 'paychecksSelectionBar';
+            const countId = ctx === 'transactions' ? 'transactionsSelectionCount' : 'paychecksSelectionCount';
+            const sumId = ctx === 'transactions' ? 'transactionsSelectionSum' : 'paychecksSelectionSum';
+            const selectAllId = ctx === 'transactions' ? 'selectAllTransactions' : 'selectAllPaychecks';
+            const count = selectedItems[ctx].size;
+
             if (count > 0) {
-                const sum = Array.from(selectedTransactions).reduce((total, id) => {
-                    const t = ledgerData.transactions.find(x => x.id === id);
-                    return total + (t ? t.amount : 0);
+                const collection = ctx === 'transactions' ? ledgerData.transactions : (ledgerData.paychecks || []);
+                const sum = Array.from(selectedItems[ctx]).reduce((total, id) => {
+                    const item = collection.find(x => x.id === id);
+                    return total + (item ? Math.abs(item.amount) : 0);
                 }, 0);
-                
-                document.getElementById('selectionCount').textContent = count;
-                document.getElementById('selectionSum').textContent = formatCurrency(sum);
-                document.getElementById('selectionBar').style.display = 'flex';
+                document.getElementById(countId).textContent = count;
+                document.getElementById(sumId).textContent = formatCurrency(sum);
+                document.getElementById(barId).style.display = 'flex';
             } else {
-                document.getElementById('selectionBar').style.display = 'none';
+                document.getElementById(barId).style.display = 'none';
             }
 
-            document.querySelectorAll('#transactionsBody tr').forEach(row => {
+            document.querySelectorAll(`#${bodyId} tr`).forEach(row => {
                 const cb = row.querySelector('input[type="checkbox"]');
                 row.classList.toggle('selected', cb && cb.checked);
             });
 
-            // Update select all checkbox
-            const allCheckboxes = document.querySelectorAll('#transactionsBody input[type="checkbox"]');
-            const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
-            document.getElementById('selectAll').checked = allChecked;
+            const allCbs = document.querySelectorAll(`#${bodyId} input[type="checkbox"]`);
+            const allChecked = allCbs.length > 0 && Array.from(allCbs).every(cb => cb.checked);
+            const saEl = document.getElementById(selectAllId);
+            if (saEl) saEl.checked = allChecked;
+        }
+
+        function confirmDeleteSelectedItems(ctx) {
+            if (selectedItems[ctx].size === 0) return;
+            pendingAction = { type: 'deleteSelected', ctx };
+            const label = ctx === 'transactions' ? 'transaction(s)' : 'paycheck entr(ies)';
+            document.getElementById('confirmModalTitle').textContent = 'Delete Selected';
+            document.getElementById('confirmModalBody').innerHTML = `<p>Are you sure you want to delete ${selectedItems[ctx].size} selected ${label}?</p>`;
+            document.getElementById('confirmActionBtn').textContent = 'Delete Selected';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
         }
 
         function sortTable(table, column) {
@@ -1388,7 +1513,19 @@
         function calculateAccountBalances(transactions) {
             const balances = {};
             ledgerData.accounts.forEach(a => balances[a.id] = a.initialBalance || 0);
+            // Add all transactions (includes paycheck-managed deduction transactions)
             transactions.forEach(t => { if (balances[t.accountId] !== undefined) balances[t.accountId] += t.amount; });
+            // Add all paycheck entries with absolute amount
+            // Scope: match the same month filter used by the caller's transaction list
+            const txMonths = new Set(transactions.map(t => t.month));
+            const allMonths = selectedMonth === null;
+            (ledgerData.paychecks || []).forEach(p => {
+                if (balances[p.accountId] !== undefined) {
+                    if (allMonths || txMonths.has(p.month)) {
+                        balances[p.accountId] += Math.abs(p.amount);
+                    }
+                }
+            });
             return balances;
         }
 
@@ -1476,8 +1613,8 @@
                 const msg = selectedMonth ? 'No transactions for this month' : 'No transactions yet';
                 const desc = selectedMonth ? 'Add transactions or select a different month' : 'Add your first transaction to start tracking';
                 tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">💸</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
-                selectedTransactions.clear();
-                updateSelectionUI();
+                selectedItems.transactions.clear();
+                updateSelectionUI('transactions');
                 return;
             }
 
@@ -1488,7 +1625,7 @@
                     switch(sortState.column) {
                         case 'date': valA = a.date; valB = b.date; break;
                         case 'month': valA = a.month; valB = b.month; break;
-                        case 'account': 
+                        case 'account':
                             const accA = ledgerData.accounts.find(x => x.id === a.accountId);
                             const accB = ledgerData.accounts.find(x => x.id === b.accountId);
                             valA = accA ? accA.name.toLowerCase() : '';
@@ -1508,8 +1645,8 @@
             tbody.innerHTML = sorted.map((t, idx) => {
                 const a = ledgerData.accounts.find(x => x.id === t.accountId);
                 const color = t.envelope && ledgerData.envelopes[t.envelope] ? ledgerData.envelopes[t.envelope].color : '#2D5F3F';
-                const checked = selectedTransactions.has(t.id) ? 'checked' : '';
-                return `<tr onclick="handleTransactionClick('${t.id}', ${idx}, event)">
+                const checked = selectedItems.transactions.has(t.id) ? 'checked' : '';
+                return `<tr onclick="handleRowClick('transactions','${t.id}',${idx},event)">
                     <td><input type="checkbox" ${checked} data-id="${t.id}"></td>
                     <td class="date">${formatDate(t.date)}</td>
                     <td>${getMonthName(t.month)}</td>
@@ -1520,7 +1657,7 @@
                 </tr>`;
             }).join('');
 
-            updateSelectionUI();
+            updateSelectionUI('transactions');
         }
 
         // ─── Envelope Calculations ────────────────────────────────────────────────────
@@ -1972,7 +2109,9 @@
             if (filtered.length === 0) {
                 const msg = selectedMonth ? 'No paycheck entries for this month' : 'No paycheck entries yet';
                 const desc = selectedMonth ? 'Add entries or select a different month' : 'Add your first paycheck entry to start tracking';
-                tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">💰</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">💰</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+                selectedItems.paychecks.clear();
+                updateSelectionUI('paychecks');
                 return;
             }
 
@@ -1993,10 +2132,11 @@
                 sorted.sort((a, b) => a.month !== b.month ? a.month - b.month : (a.amount > 0 ? -1 : 1));
             }
 
-            tbody.innerHTML = sorted.map(p => {
+            tbody.innerHTML = sorted.map((p, idx) => {
                 const acc = ledgerData.accounts.find(x => x.id === p.accountId);
                 const accName = acc ? escapeHtml(acc.name) : 'Unknown';
                 const monthName = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][p.month - 1] || '';
+                const checked = selectedItems.paychecks.has(p.id) ? 'checked' : '';
                 let details = '';
                 if (p.amount > 0) {
                     const grossStr = p.gross != null ? formatCurrency(p.gross) : '—';
@@ -2005,13 +2145,16 @@
                 } else {
                     details = p.envelope ? `<span class="envelope-tag" style="background-color:${getEnvelopeColor(p.envelope)}20;color:${getEnvelopeColor(p.envelope)};">${escapeHtml(p.envelope)}</span>` : '—';
                 }
-                return `<tr onclick="openPaycheckModal('${p.id}')">
+                return `<tr onclick="handleRowClick('paychecks','${p.id}',${idx},event)">
+                    <td><input type="checkbox" ${checked} data-id="${p.id}"></td>
                     <td>${monthName}</td>
                     <td>${accName}</td>
                     <td class="amount ${p.amount >= 0 ? 'positive' : 'negative'}">${formatCurrency(p.amount)}</td>
                     <td>${details}</td>
                 </tr>`;
             }).join('');
+
+            updateSelectionUI('paychecks');
         }
 
         function getEnvelopeColor(name) {
