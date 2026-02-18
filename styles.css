@@ -807,3 +807,14 @@ input[type="checkbox"] {
     background: #FEF3C7;
     color: #92400E;
 }
+
+.field-hint {
+    font-size: 0.78rem;
+    color: var(--color-ink-muted, #6b7280);
+    margin-top: 0.35rem;
+    font-style: italic;
+}
+input[readonly] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

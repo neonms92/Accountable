@@ -144,12 +144,15 @@
             <section>
                 <div class="section-header">
                     <h2 class="section-title">Envelopes</h2>
+                    <button onclick="openEnvelopeModal()">+ Add Envelope</button>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th class="sortable" onclick="sortTable('envelopes', 'name')">Envelope</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('envelopes', 'funding')">Funding</th>
+                                <th class="sortable" style="text-align: right;" onclick="sortTable('envelopes', 'withdrawals')">Withdrawals</th>
                                 <th class="sortable" style="text-align: right;" onclick="sortTable('envelopes', 'total')">Total</th>
                             </tr>
                         </thead>
@@ -291,28 +294,7 @@
                     </div>
                     <div class="form-group">
                         <label for="transactionEnvelope">Envelope</label>
-                        <select id="transactionEnvelope" onchange="onEnvelopeSelectChange()"></select>
-                    </div>
-                    <div class="form-group" id="newEnvelopeGroup" style="display: none;">
-                        <label for="newEnvelopeName">New Envelope Name</label>
-                        <input type="text" id="newEnvelopeName" placeholder="e.g., Food, Utilities, Income">
-                    </div>
-                    <div class="form-group" id="envelopeColorGroup" style="display: none;">
-                        <label>Envelope Color</label>
-                        <div class="color-picker-group">
-                            <div class="color-presets">
-                                <button type="button" class="color-preset" style="background: #2D5F3F;" data-color="#2D5F3F"></button>
-                                <button type="button" class="color-preset" style="background: #3B82F6;" data-color="#3B82F6"></button>
-                                <button type="button" class="color-preset" style="background: #8B5CF6;" data-color="#8B5CF6"></button>
-                                <button type="button" class="color-preset" style="background: #EC4899;" data-color="#EC4899"></button>
-                                <button type="button" class="color-preset" style="background: #F59E0B;" data-color="#F59E0B"></button>
-                                <button type="button" class="color-preset" style="background: #EF4444;" data-color="#EF4444"></button>
-                            </div>
-                            <div class="color-hex-input">
-                                <input type="text" id="envelopeColorHex" placeholder="#000000" maxlength="7">
-                                <div class="color-preview" id="colorPreview" style="background: #2D5F3F;"></div>
-                            </div>
-                        </div>
+                        <select id="transactionEnvelope"></select>
                     </div>
                 </form>
             </div>
@@ -460,6 +442,54 @@
         </div>
     </div>
 
+    <div id="envelopeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="envelopeModalTitle">Add Envelope</h3>
+            </div>
+            <div class="modal-body">
+                <form id="envelopeForm">
+                    <input type="hidden" id="envelopeId">
+                    <div class="form-group">
+                        <label for="envelopeName">Name</label>
+                        <input type="text" id="envelopeName" placeholder="e.g., Groceries, Utilities" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Color</label>
+                        <div class="color-picker-group">
+                            <div class="color-presets">
+                                <button type="button" class="color-preset" style="background: #2D5F3F;" data-color="#2D5F3F"></button>
+                                <button type="button" class="color-preset" style="background: #3B82F6;" data-color="#3B82F6"></button>
+                                <button type="button" class="color-preset" style="background: #8B5CF6;" data-color="#8B5CF6"></button>
+                                <button type="button" class="color-preset" style="background: #EC4899;" data-color="#EC4899"></button>
+                                <button type="button" class="color-preset" style="background: #F59E0B;" data-color="#F59E0B"></button>
+                                <button type="button" class="color-preset" style="background: #EF4444;" data-color="#EF4444"></button>
+                            </div>
+                            <div class="color-hex-input">
+                                <input type="text" id="envelopeModalColorHex" placeholder="#000000" maxlength="7">
+                                <div class="color-preview" id="envelopeModalColorPreview" style="background: #2D5F3F;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group" id="envelopeFundingGroup">
+                        <label for="envelopeFunding" id="envelopeFundingLabel">Funding <span id="envelopeFundingMonthLabel"></span></label>
+                        <input type="number" id="envelopeFunding" step="0.01" min="0" placeholder="0.00">
+                        <div id="envelopeFundingHint" class="field-hint"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-footer-left">
+                    <button id="deleteEnvelopeBtn" onclick="confirmDeleteEnvelope()" class="danger" style="display:none;">Delete</button>
+                </div>
+                <div class="modal-footer-right">
+                    <button onclick="closeEnvelopeModal()" class="secondary">Cancel</button>
+                    <button onclick="saveEnvelope()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="confirmModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -542,6 +572,7 @@
         let ledgerData = { accounts: [], transactions: [], envelopes: {}, statements: [], fileName: null };
         let selectedMonth = null;
         let selectedEnvelopeColor = '#2D5F3F';
+        let envelopeModalColor = '#2D5F3F';
         let sortState = { table: null, column: null, direction: 'asc' };
         let selectedTransactions = new Set();
         let lastSelectedIndex = -1;
@@ -578,15 +609,7 @@
         }
 
         function setupColorPicker() {
-            document.querySelectorAll('.color-preset').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    selectColor(btn.dataset.color);
-                });
-            });
-            document.getElementById('envelopeColorHex').addEventListener('input', (e) => {
-                if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) selectColor(e.target.value);
-            });
+            // Envelope modal color picker is wired in openEnvelopeModal dynamically
         }
 
         function setupKeyboardShortcuts() {
@@ -619,19 +642,19 @@
 
         function selectColor(color) {
             selectedEnvelopeColor = color;
-            document.getElementById('colorPreview').style.background = color;
-            document.getElementById('envelopeColorHex').value = color;
-            document.querySelectorAll('.color-preset').forEach(btn => {
+        }
+
+        function selectEnvelopeModalColor(color) {
+            envelopeModalColor = color;
+            document.getElementById('envelopeModalColorPreview').style.background = color;
+            document.getElementById('envelopeModalColorHex').value = color;
+            document.querySelectorAll('#envelopeModal .color-preset').forEach(btn => {
                 btn.classList.toggle('selected', btn.dataset.color.toLowerCase() === color.toLowerCase());
             });
         }
 
         function onEnvelopeSelectChange() {
-            const val = document.getElementById('transactionEnvelope').value;
-            const show = val === '__new__';
-            document.getElementById('newEnvelopeGroup').style.display = show ? 'block' : 'none';
-            document.getElementById('envelopeColorGroup').style.display = show ? 'block' : 'none';
-            if (show) setTimeout(() => document.getElementById('newEnvelopeName').focus(), 50);
+            // no-op: inline envelope creation removed
         }
 
         function showMessage(msg, type = 'success') {
@@ -669,6 +692,10 @@
                             ledgerData.fileName = file.name;
                             if (!ledgerData.envelopes) ledgerData.envelopes = {};
                             if (!ledgerData.statements) ledgerData.statements = [];
+                            // Migrate envelopes: ensure all have a funding object
+                            Object.keys(ledgerData.envelopes).forEach(name => {
+                                if (!ledgerData.envelopes[name].funding) ledgerData.envelopes[name].funding = {};
+                            });
                             updateUI();
                             showMessage('File loaded successfully!');
                         } catch {
@@ -827,7 +854,9 @@
             });
 
             envelopes.forEach(name => {
-                ledgerData.envelopes[name] = { color: '#2D5F3F' };
+                if (!ledgerData.envelopes[name]) {
+                    ledgerData.envelopes[name] = { color: '#2D5F3F', funding: {} };
+                }
             });
 
             transactions.forEach(t => {
@@ -927,6 +956,18 @@
                     closeStatementModal();
                     showMessage('Statement deleted successfully!');
                     break;
+                case 'deleteEnvelope':
+                    // Remove envelope entity
+                    delete ledgerData.envelopes[pendingAction.name];
+                    // Clear envelope from transactions
+                    ledgerData.transactions.forEach(t => {
+                        if (t.envelope === pendingAction.name) t.envelope = '';
+                    });
+                    markUnsaved();
+                    updateUI();
+                    closeEnvelopeModal();
+                    showMessage('Envelope deleted!');
+                    break;
             }
 
             closeConfirmModal();
@@ -1018,8 +1059,6 @@
             }
 
             document.getElementById('transactionModal').classList.add('active');
-            document.getElementById('newEnvelopeGroup').style.display = 'none';
-            document.getElementById('envelopeColorGroup').style.display = 'none';
             setTimeout(() => document.getElementById('transactionDate').focus(), 100);
         }
 
@@ -1030,17 +1069,13 @@
         function populateEnvelopeSelect() {
             const select = document.getElementById('transactionEnvelope');
             const envs = Object.keys(ledgerData.envelopes || {}).sort();
-            select.innerHTML = '<option value="">Select or create envelope...</option>';
+            select.innerHTML = '<option value="">— No envelope —</option>';
             envs.forEach(env => {
                 const opt = document.createElement('option');
                 opt.value = env;
                 opt.textContent = env;
                 select.appendChild(opt);
             });
-            const newOpt = document.createElement('option');
-            newOpt.value = '__new__';
-            newOpt.textContent = '+ Create New Envelope';
-            select.appendChild(newOpt);
         }
 
         function saveTransaction() {
@@ -1050,14 +1085,7 @@
             const accountId = document.getElementById('transactionAccount').value;
             const amount = parseFloat(document.getElementById('transactionAmount').value);
             const description = document.getElementById('transactionDescription').value.trim();
-            let envelope = document.getElementById('transactionEnvelope').value;
-
-            if (envelope === '__new__') {
-                const newName = document.getElementById('newEnvelopeName').value.trim();
-                if (!newName) return showMessage('Please enter an envelope name', 'error');
-                envelope = newName;
-                ledgerData.envelopes[envelope] = { color: selectedEnvelopeColor };
-            }
+            const envelope = document.getElementById('transactionEnvelope').value;
 
             if (!date || !month || !accountId || !description) return showMessage('Please fill in all required fields', 'error');
 
@@ -1355,35 +1383,203 @@
             updateSelectionUI();
         }
 
+        // ─── Envelope Calculations ────────────────────────────────────────────────────
+
+        // Get the effective funding for an envelope in a given month.
+        // If there's no explicit entry for that month, walk back to the most recent prior month.
+        // If none found, default to 0.
+        function getEnvelopeFunding(name, month) {
+            const env = ledgerData.envelopes[name];
+            if (!env) return 0;
+            const funding = env.funding || {};
+            if (funding[month] !== undefined) return funding[month];
+            // Walk backwards to find the most recent prior explicit funding
+            for (let m = month - 1; m >= 1; m--) {
+                if (funding[m] !== undefined) return funding[m];
+            }
+            return 0;
+        }
+
+        // Calculate envelope running total up through a given month (inclusive).
+        // total(month) = sum of (funding(m) - withdrawals(m)) for m=1..month
+        function calculateEnvelopeTotal(name, upToMonth) {
+            let total = 0;
+            const maxMonth = upToMonth === null ? 12 : upToMonth;
+            for (let m = 1; m <= maxMonth; m++) {
+                const funding = getEnvelopeFunding(name, m);
+                const withdrawals = ledgerData.transactions
+                    .filter(t => t.month === m && t.envelope === name && t.amount < 0)
+                    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+                total += funding - withdrawals;
+            }
+            return total;
+        }
+
         function updateEnvelopesTable() {
             const tbody = document.getElementById('envelopesBody');
-            const filt = getFilteredTransactions();
-            const totals = {};
-            filt.forEach(t => { if (t.envelope && t.envelope !== 'Transfer') totals[t.envelope] = (totals[t.envelope] || 0) + t.amount; });
-            
-            let envs = Object.entries(totals);
+            const envNames = Object.keys(ledgerData.envelopes || {}).filter(n => n !== 'Transfer');
 
-            if (sortState.table === 'envelopes') {
-                envs.sort((a, b) => {
-                    let valA = sortState.column === 'name' ? a[0].toLowerCase() : a[1];
-                    let valB = sortState.column === 'name' ? b[0].toLowerCase() : b[1];
-                    return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-                });
-            } else {
-                envs.sort((a, b) => a[1] - b[1]);
-            }
-
-            if (envs.length === 0) {
-                const msg = selectedMonth ? 'No envelope data for this month' : 'No envelope data';
-                const desc = selectedMonth ? 'Add transactions or select a different month' : 'Envelopes will appear once you add transactions';
-                tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+            if (envNames.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">📬</div><div class="empty-state-title">No envelopes yet</div><p>Add your first envelope to start budgeting</p></div></td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = envs.map(([cat, tot]) => {
-                const color = ledgerData.envelopes[cat] ? ledgerData.envelopes[cat].color : '#2D5F3F';
-                return `<tr style="cursor: default;"><td><span class="envelope-tag" style="background-color:${color}20;color:${color};">${escapeHtml(cat)}</span></td><td class="amount ${tot >= 0 ? 'positive' : 'negative'}">${formatCurrency(tot)}</td></tr>`;
+            // Build rows with computed values
+            const displayMonth = selectedMonth; // may be null (All)
+            let rows = envNames.map(name => {
+                const color = ledgerData.envelopes[name].color || '#2D5F3F';
+                const funding = displayMonth ? getEnvelopeFunding(name, displayMonth) : 
+                    Array.from({length:12},(_,i)=>i+1).reduce((s,m)=>s+getEnvelopeFunding(name,m),0);
+                const withdrawals = (displayMonth
+                    ? ledgerData.transactions.filter(t => t.month === displayMonth && t.envelope === name && t.amount < 0)
+                    : ledgerData.transactions.filter(t => t.envelope === name && t.amount < 0)
+                ).reduce((s,t) => s + Math.abs(t.amount), 0);
+                const total = displayMonth ? calculateEnvelopeTotal(name, displayMonth) : calculateEnvelopeTotal(name, 12);
+                return { name, color, funding, withdrawals, total };
+            });
+
+            if (sortState.table === 'envelopes') {
+                rows.sort((a, b) => {
+                    let vA, vB;
+                    if (sortState.column === 'name') { vA = a.name.toLowerCase(); vB = b.name.toLowerCase(); }
+                    else if (sortState.column === 'funding') { vA = a.funding; vB = b.funding; }
+                    else if (sortState.column === 'withdrawals') { vA = a.withdrawals; vB = b.withdrawals; }
+                    else { vA = a.total; vB = b.total; }
+                    return sortState.direction === 'asc' ? (vA > vB ? 1 : -1) : (vA < vB ? 1 : -1);
+                });
+            } else {
+                rows.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+            }
+
+            tbody.innerHTML = rows.map(r => {
+                const bg = r.color + '20';
+                return `<tr onclick="openEnvelopeModal('${escapeHtml(r.name)}')">
+                    <td><span class="envelope-tag" style="background-color:${bg};color:${r.color};">${escapeHtml(r.name)}</span></td>
+                    <td class="amount positive">${formatCurrency(r.funding)}</td>
+                    <td class="amount ${r.withdrawals > 0 ? 'negative' : ''}">${r.withdrawals > 0 ? '-' : ''}${formatCurrency(r.withdrawals)}</td>
+                    <td class="amount ${r.total >= 0 ? 'positive' : 'negative'}">${formatCurrency(r.total)}</td>
+                </tr>`;
             }).join('');
+        }
+
+        // ─── Envelope Modal ───────────────────────────────────────────────────────────
+
+        function openEnvelopeModal(name = null) {
+            const isEdit = name !== null;
+            document.getElementById('envelopeModalTitle').textContent = isEdit ? 'Edit Envelope' : 'Add Envelope';
+            document.getElementById('envelopeId').value = name || '';
+            document.getElementById('deleteEnvelopeBtn').style.display = isEdit ? 'block' : 'none';
+
+            let color = '#2D5F3F';
+            let fundingVal = '';
+
+            if (isEdit && ledgerData.envelopes[name]) {
+                const env = ledgerData.envelopes[name];
+                document.getElementById('envelopeName').value = name;
+                document.getElementById('envelopeName').readOnly = true; // name is the key, renaming would be complex
+                color = env.color || '#2D5F3F';
+
+                if (selectedMonth) {
+                    const explicit = (env.funding || {})[selectedMonth];
+                    const inherited = getEnvelopeFunding(name, selectedMonth);
+                    fundingVal = explicit !== undefined ? explicit : '';
+                    // Show hint about inherited value
+                    const hint = document.getElementById('envelopeFundingHint');
+                    if (explicit === undefined && selectedMonth > 1) {
+                        hint.textContent = `Inheriting ${formatCurrency(inherited)} from a prior month. Enter a value to override.`;
+                    } else if (explicit === undefined && selectedMonth === 1) {
+                        hint.textContent = 'Defaults to $0.00 in January. Enter a value to set funding.';
+                    } else {
+                        hint.textContent = '';
+                    }
+                }
+            } else {
+                document.getElementById('envelopeName').value = '';
+                document.getElementById('envelopeName').readOnly = false;
+                document.getElementById('envelopeFundingHint').textContent = '';
+            }
+
+            // Show/hide funding field based on whether a month is selected
+            const fundingGroup = document.getElementById('envelopeFundingGroup');
+            const fundingLabel = document.getElementById('envelopeFundingMonthLabel');
+            if (selectedMonth) {
+                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                fundingGroup.style.display = 'block';
+                fundingLabel.textContent = `for ${months[selectedMonth - 1]}`;
+                document.getElementById('envelopeFunding').value = fundingVal;
+            } else {
+                fundingGroup.style.display = 'none';
+            }
+
+            envelopeModalColor = color;
+            document.getElementById('envelopeModalColorPreview').style.background = color;
+            document.getElementById('envelopeModalColorHex').value = color;
+
+            // Wire up color picker
+            document.querySelectorAll('#envelopeModal .color-preset').forEach(btn => {
+                btn.onclick = (e) => { e.preventDefault(); selectEnvelopeModalColor(btn.dataset.color); };
+                btn.classList.toggle('selected', btn.dataset.color.toLowerCase() === color.toLowerCase());
+            });
+            document.getElementById('envelopeModalColorHex').oninput = (e) => {
+                if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) selectEnvelopeModalColor(e.target.value);
+            };
+
+            document.getElementById('envelopeModal').classList.add('active');
+            if (!isEdit) setTimeout(() => document.getElementById('envelopeName').focus(), 100);
+        }
+
+        function closeEnvelopeModal() {
+            document.getElementById('envelopeModal').classList.remove('active');
+            document.getElementById('envelopeName').readOnly = false;
+        }
+
+        function saveEnvelope() {
+            const oldName = document.getElementById('envelopeId').value;
+            const name = document.getElementById('envelopeName').value.trim();
+            const color = envelopeModalColor;
+
+            if (!name) return showMessage('Please enter an envelope name', 'error');
+
+            const isEdit = oldName !== '';
+
+            if (!isEdit) {
+                // Creating new envelope
+                if (ledgerData.envelopes[name]) return showMessage('An envelope with this name already exists', 'error');
+                ledgerData.envelopes[name] = { color, funding: {} };
+            } else {
+                // Editing existing
+                if (!ledgerData.envelopes[oldName]) return;
+                ledgerData.envelopes[oldName].color = color;
+            }
+
+            // Save funding if a month is selected
+            if (selectedMonth && document.getElementById('envelopeFundingGroup').style.display !== 'none') {
+                const rawFunding = document.getElementById('envelopeFunding').value;
+                const targetName = isEdit ? oldName : name;
+                if (!ledgerData.envelopes[targetName].funding) ledgerData.envelopes[targetName].funding = {};
+                if (rawFunding === '' || rawFunding === null) {
+                    // Clear explicit override - revert to inheritance
+                    delete ledgerData.envelopes[targetName].funding[selectedMonth];
+                } else {
+                    ledgerData.envelopes[targetName].funding[selectedMonth] = parseFloat(rawFunding) || 0;
+                }
+            }
+
+            markUnsaved();
+            updateUI();
+            closeEnvelopeModal();
+            showMessage(isEdit ? 'Envelope updated!' : 'Envelope added!');
+        }
+
+        function confirmDeleteEnvelope() {
+            const name = document.getElementById('envelopeId').value;
+            if (!name) return;
+            pendingAction = { type: 'deleteEnvelope', name };
+            document.getElementById('confirmModalTitle').textContent = 'Delete Envelope';
+            document.getElementById('confirmModalBody').innerHTML = `<p>Are you sure you want to delete the <strong>${escapeHtml(name)}</strong> envelope? Transactions assigned to it will not be deleted, but will lose their envelope assignment.</p>`;
+            document.getElementById('confirmActionBtn').textContent = 'Delete Envelope';
+            document.getElementById('confirmActionBtn').className = 'danger';
+            document.getElementById('confirmModal').classList.add('active');
         }
 
         function populateAccountSelects() {
@@ -1432,11 +1628,23 @@
         }
 
         function updateTabIncompleteIndicators() {
+            // Statements: incomplete when a month is selected and not all accounts have a statement
             const statementsBtn = document.querySelector('.tab[onclick="switchTab(\'statements\')"]');
             if (statementsBtn) {
-                const month = selectedMonth;
-                const incomplete = month && ledgerData.accounts.length > 0 && !isStatementsComplete(month);
+                const incomplete = selectedMonth && ledgerData.accounts.length > 0 && !isStatementsComplete(selectedMonth);
                 statementsBtn.classList.toggle('tab-incomplete', !!incomplete);
+            }
+
+            // Envelopes: incomplete when any envelope has a negative total in the current view
+            const envelopesBtn = document.querySelector('.tab[onclick="switchTab(\'envelopes\')"]');
+            if (envelopesBtn) {
+                const envNames = Object.keys(ledgerData.envelopes || {}).filter(n => n !== 'Transfer');
+                const checkMonth = selectedMonth;
+                const anyNegative = envNames.some(name => {
+                    const total = calculateEnvelopeTotal(name, checkMonth === null ? 12 : checkMonth);
+                    return total < -0.005;
+                });
+                envelopesBtn.classList.toggle('tab-incomplete', envNames.length > 0 && anyNegative);
             }
         }
 
