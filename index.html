@@ -9,38 +9,122 @@
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://accounts.google.com/gsi/client"></script>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .tab-incomplete {
+            position: relative;
+        }
+        .tab-incomplete::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #F59E0B;
+            box-shadow: 0 0 0 1.5px var(--color-bg, #fff);
+        }
+        .stmt-status {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: default;
+        }
+        .stmt-status.ok {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+        .stmt-status.warn {
+            background: #FEF3C7;
+            color: #92400E;
+        }
+        .statement-sanity {
+            padding: 0.6rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+        .statement-sanity.ok {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+        .statement-sanity.warn {
+            background: #FEF3C7;
+            color: #92400E;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .field-hint {
+            font-size: 0.78rem;
+            color: var(--color-ink-muted, #6b7280);
+            margin-top: 0.35rem;
+            font-style: italic;
+        }
+        input[readonly] {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .toggle-group {
+            display: flex;
+            gap: 0;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--color-border, #d1d5db);
+            width: fit-content;
+        }
+        .toggle-btn {
+            padding: 0.4rem 1rem;
+            border: none;
+            background: var(--color-surface, #f9fafb);
+            color: var(--color-ink-muted, #6b7280);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: background 0.15s, color 0.15s;
+        }
+        .toggle-btn:not(:last-child) {
+            border-right: 1px solid var(--color-border, #d1d5db);
+        }
+        .toggle-btn.active {
+            background: var(--color-primary, #2D5F3F);
+            color: #fff;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body>
     <div class="message-container" id="messageContainer"></div>
 
     <!-- 
         Todo:
-        Import generator with merchant lookup
-            Seperate application that generates CSVs for importing based on user-provided rules and historical transaction data
-        Charts
-            Spending by envelope over time
-            Account balances over time
-        Previous year's reference data
-            Import previous year's data for comparison and analysis
-        Envelopes
-            Automatic funding rules
-                Manage - Fund to average monthly spending over # previous months
-                Goal - Fund to target amount by end of given month
-
-        Done
-        Paycheck tracking
-            Complete for the month once account deposit totals match statement totals for the month
-        Refactor Envelopes
-            Added explicitly, not inferred from Transactions
-            Transactions deduct from envelope balance
-            Envelopes have manual funding rules
-            Envelopes are complete for the month once total funding matches account balance totals
         Statements
             Each account has a statement each month which declares the starting balance, ending balance, dates covered, total deposits, and total withdrawals for the month
             Simple sanity checking with deposit/withdrawal totals and starting/ending balances
         Transaction conditions
             Transactions are complete for the month once account withdrawal totals match statement totals for the month
             Transactions must also have envelopes assigned to be complete for the month
+        Refactor Envelopes
+            Added explicitly, not inferred from Transactions
+            Transactions deduct from envelope balance
+            Envelopes have manual or automatic funding rules
+            Envelopes are complete for the month once total funding matches account balance totals
+        Paycheck tracking
+            Complete for the month once account deposit totals match statement totals for the month
+        Import generator with merchant lookup
+            Seperate application that generates CSVs for importing based on user-provided rules and historical transaction data
+        Goals
+            Set target amounts for envelopes and track progress
+        Charts
+            Spending by envelope over time
+            Account balances over time
     -->
 
     <header>
@@ -1515,14 +1599,14 @@
             ledgerData.accounts.forEach(a => balances[a.id] = a.initialBalance || 0);
             // Add all transactions (includes paycheck-managed deduction transactions)
             transactions.forEach(t => { if (balances[t.accountId] !== undefined) balances[t.accountId] += t.amount; });
-            // Add all paycheck entries with absolute amount
+            // Add positive paycheck entries (income — not stored as transactions)
             // Scope: match the same month filter used by the caller's transaction list
             const txMonths = new Set(transactions.map(t => t.month));
             const allMonths = selectedMonth === null;
             (ledgerData.paychecks || []).forEach(p => {
-                if (balances[p.accountId] !== undefined) {
+                if (p.amount > 0 && balances[p.accountId] !== undefined) {
                     if (allMonths || txMonths.has(p.month)) {
-                        balances[p.accountId] += Math.abs(p.amount);
+                        balances[p.accountId] += p.amount;
                     }
                 }
             });
@@ -1940,14 +2024,23 @@
                 : paychecks;
             if (relevantPaychecks.length === 0) return true;
 
-            const positiveEntries = relevantPaychecks.filter(p => p.amount > 0);
-            const negativeEntries = relevantPaychecks.filter(p => p.amount < 0);
-            if (positiveEntries.length === 0) return true; // no income entries, nothing to validate
-            const totalNet = positiveEntries.reduce((s, p) => s + p.amount, 0);
-            const totalGross = positiveEntries.reduce((s, p) => s + (p.gross || p.amount), 0);
-            const totalDeductions = negativeEntries.reduce((s, p) => s + Math.abs(p.amount), 0);
-            const expectedNet = totalGross - totalDeductions;
-            return Math.abs(totalNet - expectedNet) < 0.005;
+            // Group by accountId
+            const byAccount = {};
+            relevantPaychecks.forEach(p => {
+                if (!byAccount[p.accountId]) byAccount[p.accountId] = [];
+                byAccount[p.accountId].push(p);
+            });
+
+            return Object.values(byAccount).every(entries => {
+                const positiveEntries = entries.filter(p => p.amount > 0);
+                const negativeEntries = entries.filter(p => p.amount < 0);
+                if (positiveEntries.length === 0) return true; // no income entries, nothing to validate
+                const totalNet = positiveEntries.reduce((s, p) => s + p.amount, 0);
+                const totalGross = positiveEntries.reduce((s, p) => s + (p.gross || p.amount), 0);
+                const totalDeductions = negativeEntries.reduce((s, p) => s + Math.abs(p.amount), 0);
+                const expectedNet = totalGross - totalDeductions;
+                return Math.abs(totalNet - expectedNet) < 0.005;
+            });
         }
 
         function updateStatementsTab() {
