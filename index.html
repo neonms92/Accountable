@@ -64,7 +64,7 @@
         <div class="month-selector">
             <label for="monthSelect">Month:</label>
             <select id="monthSelect" onchange="onMonthChange()">
-                <option value="">All Months</option>
+                
             </select>
         </div>
     </div>
@@ -750,7 +750,6 @@
         function populateMonthSelector() {
             const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             const select = document.getElementById('monthSelect');
-            select.innerHTML = '<option value="">All Months</option>';
             months.forEach((month, i) => {
                 const opt = document.createElement('option');
                 opt.value = (i + 1).toString();
@@ -874,6 +873,7 @@
                                 if (!ledgerData.envelopes[name].funding) ledgerData.envelopes[name].funding = {};
                                 if (ledgerData.envelopes[name].necessary === undefined) ledgerData.envelopes[name].necessary = false;
                             });
+                            selectDefaultMonth();
                             updateUI();
                             showMessage('File loaded successfully!');
                         } catch {
@@ -884,6 +884,22 @@
                 }
             };
             input.click();
+        }
+
+        function selectDefaultMonth() {
+            // Select the month of the most recent transaction, if any
+            if (ledgerData.transactions && ledgerData.transactions.length > 0) {
+                const recent = ledgerData.transactions.reduce((latest, t) => {
+                    const tDate = new Date(t.date);
+                    return (!latest || tDate > new Date(latest.date)) ? t : latest;
+                }, null);
+                if (recent) {
+                    // parse date without timezone issues by splitting and using Date.UTC
+                    const [year, month] = recent.date.split('-');
+                    selectedMonth = parseInt(month, 10);
+                    document.getElementById('monthSelect').value = selectedMonth.toString();
+                }
+            }
         }
 
         function saveFile() {
