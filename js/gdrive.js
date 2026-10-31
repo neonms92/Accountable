@@ -55,28 +55,6 @@ function waitForGIS(cb, attempts = 0) {
     }
 }
 
-function injectGISScript_2(cb) {
-    // Dynamically inject the GIS script
-    const existing = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
-    if (existing) {
-        waitForGIS(cb, 0);
-        return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-        waitForGIS(cb, 0);
-    };
-    script.onerror = (err) => {
-        console.error('[Drive] Failed to load GIS script — network blocked, CSP, or CORS issue', err);
-        updateDriveStatus(false, 'GIS blocked');
-        showMessage('Could not load Google Sign-In library. Check console for errors.', 'error');
-    };
-    document.head.appendChild(script);
-}
-
 function injectGISScript(cb) {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -168,10 +146,10 @@ function driveAutoLoad() {
                 await ensureFolder();
                 const files = await listJsonFiles();
                 const defaultFile = files.find(f => f.name === 'data.json');
-                if (defaultFile) {
+                // Don't replace anything the user has started entering meanwhile
+                if (defaultFile && !hasUnsavedChanges) {
                     const content = await downloadFile(defaultFile.id);
-                    loadLedgerFromString(content, 'data.json');
-                    showMessage('Auto-loaded data.json from Google Drive');
+                    if (loadLedgerFromString(content, 'data.json')) showMessage('Auto-loaded data.json from Google Drive');
                 }
             } catch (e) {
                 console.warn('[Drive] auto-load failed:', e);
@@ -280,14 +258,11 @@ async function renameFile(fileId, newName) {
 
 function loadLedgerFromString(content, name) {
     try {
-        const parsed = JSON.parse(content);
-        ledgerData = parsed;
-        ledgerData.fileName = name;
-        if (!ledgerData.categories) ledgerData.categories = {};
-        markSaved();
-        updateUI();
+        loadLedger(content, name);
+        return true;
     } catch (e) {
-        showMessage('Error parsing file: ' + e.message, 'error');
+        showMessage('Error loading ' + name + ': ' + e.message, 'error');
+        return false;
     }
 }
 
@@ -338,9 +313,14 @@ async function openDriveFile(fileId, fileName, itemEl) {
     itemEl.querySelector('.drive-file-name').textContent = 'Loading…';
     try {
         const content = await downloadFile(fileId);
-        loadLedgerFromString(content, fileName);
-        showMessage('Loaded ' + fileName + ' from Google Drive');
-        closeDriveOpenModal();
+        if (loadLedgerFromString(content, fileName)) {
+            showMessage('Loaded ' + fileName + ' from Google Drive');
+            closeDriveOpenModal();
+            closeFileMenuModal();
+        } else {
+            itemEl.classList.remove('loading-file');
+            itemEl.querySelector('.drive-file-name').textContent = fileName;
+        }
     } catch (e) {
         showMessage('Error loading file: ' + e.message, 'error');
         itemEl.classList.remove('loading-file');

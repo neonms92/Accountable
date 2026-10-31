@@ -1,37 +1,47 @@
 // ─── Application State ───────────────────────────────────────────────────────
-let ledgerData = { accounts: [], transactions: [], envelopes: {}, statements: [], paychecks: [], fileName: null };
-let selectedMonth = null;
-let selectedEnvelopeColor = '#2D5F3F';
-let envelopeModalColor = '#2D5F3F';
+// Script load order (see index.html): ledger.js first, this file last; it calls init().
+let ledgerData = Ledger.emptyLedger();
+let selectedMonth = new Date().getMonth() + 1;
+let envelopeModalColor = Ledger.DEFAULT_COLOR;
 let sortState = { table: null, column: null, direction: 'asc' };
 // Generic multiselect state: keyed by context ('transactions' | 'paychecks')
 let selectedItems = { transactions: new Set(), paychecks: new Set() };
 let lastSelectedIndex = { transactions: -1, paychecks: -1 };
 let pendingAction = null;
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 function init() {
-    setTodayDate();
     populateMonthSelector();
-    setupColorPicker();
+    syncPeriodControls();
+    setTodayDate();
     setupKeyboardShortcuts();
+    setupFormListeners();
     updateUI();
     driveInit();
 }
 
+// Default date for new entries: today if it falls in the ledger's year, otherwise
+// the first of the selected month in that year.
+function defaultEntryDate() {
+    const today = new Date();
+    if (today.getFullYear() === ledgerData.year) return today.toISOString().split('T')[0];
+    return Ledger.defaultDate(ledgerData.year, selectedMonth);
+}
+
 function setTodayDate() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('transactionDate').value = today;
-    document.getElementById('transferDate').value = today;
-    document.getElementById('paycheckDate').value = today;
-    const currentMonth = new Date().getMonth() + 1;
-    document.getElementById('transactionMonth').value = currentMonth.toString();
-    document.getElementById('transferMonth').value = currentMonth.toString();
+    const date = defaultEntryDate();
+    const month = String(Ledger.monthFromDate(date));
+    document.getElementById('transactionDate').value = date;
+    document.getElementById('transferDate').value = date;
+    document.getElementById('paycheckDate').value = date;
+    document.getElementById('transactionMonth').value = month;
+    document.getElementById('transferMonth').value = month;
 }
 
 function populateMonthSelector() {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const select = document.getElementById('monthSelect');
-    months.forEach((month, i) => {
+    MONTH_NAMES.forEach((month, i) => {
         const opt = document.createElement('option');
         opt.value = (i + 1).toString();
         opt.textContent = month;
@@ -39,8 +49,9 @@ function populateMonthSelector() {
     });
 }
 
-function setupColorPicker() {
-    // Envelope modal color picker is wired in openEnvelopeModal dynamically
+function syncPeriodControls() {
+    document.getElementById('monthSelect').value = String(selectedMonth);
+    document.getElementById('yearInput').value = ledgerData.year;
 }
 
 function setupKeyboardShortcuts() {
@@ -75,6 +86,21 @@ function setupKeyboardShortcuts() {
     });
 }
 
+function setupFormListeners() {
+    // Picking a date fills in its month; the month can still be changed afterwards
+    // for entries that belong to a different statement period.
+    [['transactionDate', 'transactionMonth'], ['transferDate', 'transferMonth'],
+     ['paycheckDate', 'paycheckMonth'], ['statementEndDate', 'statementMonth']].forEach(([dateId, monthId]) => {
+        document.getElementById(dateId).addEventListener('change', (e) => {
+            const m = Ledger.monthFromDate(e.target.value);
+            if (m) document.getElementById(monthId).value = String(m);
+        });
+    });
+    ['statementStartBalance', 'statementEndBalance', 'statementDeposits', 'statementWithdrawals'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateStatementSanityCheck);
+    });
+}
+
 function getActiveSelectionContext() {
     if (document.getElementById('transactionsTab').classList.contains('active')) return 'transactions';
     if (document.getElementById('paychecksTab').classList.contains('active')) return 'paychecks';
@@ -96,10 +122,6 @@ function moveSelection(ctx, direction) {
     }
 }
 
-function selectColor(color) {
-    selectedEnvelopeColor = color;
-}
-
 function selectEnvelopeModalColor(color) {
     envelopeModalColor = color;
     document.getElementById('envelopeModalColorPreview').style.background = color;
@@ -107,10 +129,6 @@ function selectEnvelopeModalColor(color) {
     document.querySelectorAll('#envelopeModal .color-preset').forEach(btn => {
         btn.classList.toggle('selected', btn.dataset.color.toLowerCase() === color.toLowerCase());
     });
-}
-
-function onEnvelopeSelectChange() {
-    // no-op: inline envelope creation removed
 }
 
 function showMessage(msg, type = 'success') {
@@ -123,14 +141,44 @@ function showMessage(msg, type = 'success') {
 }
 
 function switchTab(name) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.getElementById(name + 'Tab').classList.add('active');
 }
 
 function onMonthChange() {
-    selectedMonth = document.getElementById('monthSelect').value ? parseInt(document.getElementById('monthSelect').value) : null;
+    selectedMonth = parseInt(document.getElementById('monthSelect').value, 10);
+    setTodayDate();
+    updateUI();
+}
+
+function onYearChange() {
+    const year = parseInt(document.getElementById('yearInput').value, 10);
+    if (!(year >= 1900 && year <= 2999)) {
+        document.getElementById('yearInput').value = ledgerData.year;
+        return showMessage('Please enter a valid year', 'error');
+    }
+    if (year === ledgerData.year) return;
+    ledgerData.year = year;
+    setTodayDate();
+    markUnsaved();
+    updateUI();
+}
+
+// ─── Loading and saving ──────────────────────────────────────────────────────
+
+// Single entry point for every load (local file or Google Drive), so older files
+// are always migrated the same way.
+function loadLedger(raw, fileName) {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    ledgerData = Ledger.migrate(parsed);
+    ledgerData.fileName = fileName;
+    selectedItems = { transactions: new Set(), paychecks: new Set() };
+    lastSelectedIndex = { transactions: -1, paychecks: -1 };
+    selectDefaultMonth();
+    syncPeriodControls();
+    setTodayDate();
+    markSaved();
     updateUI();
 }
 
@@ -140,46 +188,34 @@ function openFile() {
     input.accept = '.json';
     input.onchange = (e) => {
         const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    ledgerData = JSON.parse(event.target.result);
-                    ledgerData.fileName = file.name;
-                    if (!ledgerData.envelopes) ledgerData.envelopes = {};
-                    if (!ledgerData.statements) ledgerData.statements = [];
-                    if (!ledgerData.paychecks) ledgerData.paychecks = [];
-                    // Migrate envelopes: ensure all have a funding object and necessary flag
-                    Object.keys(ledgerData.envelopes).forEach(name => {
-                        if (!ledgerData.envelopes[name].funding) ledgerData.envelopes[name].funding = {};
-                        if (ledgerData.envelopes[name].necessary === undefined) ledgerData.envelopes[name].necessary = false;
-                    });
-                    selectDefaultMonth();
-                    updateUI();
-                    showMessage('File loaded successfully!');
-                } catch {
-                    showMessage('Error loading file: Invalid JSON format', 'error');
-                }
-            };
-            reader.readAsText(file);
-        }
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                loadLedger(event.target.result, file.name);
+                closeFileMenuModal();
+                showMessage('File loaded successfully!');
+            } catch (err) {
+                showMessage('Error loading file: ' + err.message, 'error');
+            }
+        };
+        reader.readAsText(file);
     };
     input.click();
 }
 
+// Select the month of the most recent dated entry; with no entries, the current
+// month if the ledger is for this year, otherwise January.
 function selectDefaultMonth() {
-    // Select the month of the most recent transaction, if any
-    if (ledgerData.transactions && ledgerData.transactions.length > 0) {
-        const recent = ledgerData.transactions.reduce((latest, t) => {
-            const tDate = new Date(t.date);
-            return (!latest || tDate > new Date(latest.date)) ? t : latest;
-        }, null);
-        if (recent) {
-            // parse date without timezone issues by splitting and using Date.UTC
-            const [year, month] = recent.date.split('-');
-            selectedMonth = parseInt(month, 10);
-            document.getElementById('monthSelect').value = selectedMonth.toString();
-        }
+    const dates = [...ledgerData.transactions, ...ledgerData.paychecks]
+        .filter(x => Ledger.yearFromDate(x.date) === ledgerData.year && x.month)
+        .map(x => x.date);
+    if (dates.length) {
+        const latest = dates.reduce((a, b) => (b > a ? b : a));
+        selectedMonth = Ledger.monthFromDate(latest);
+    } else {
+        const now = new Date();
+        selectedMonth = now.getFullYear() === ledgerData.year ? now.getMonth() + 1 : 1;
     }
 }
 
@@ -189,7 +225,7 @@ function saveFile() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = ledgerData.fileName || 'budget-ledger.json';
+    a.download = ledgerData.fileName || `budget-ledger-${ledgerData.year}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -240,40 +276,33 @@ function isAnyModalOpen() {
     return Array.from(document.querySelectorAll('.modal')).some(m => m.classList.contains('active'));
 }
 
-// Entry point: open a file picker then route to the right parser
-
 // ── Shared confirm helper ─────────────────────────────────────────────────────
-function showImportConfirm(title, bodyHtml, onConfirm) {
-    pendingAction = { type: 'importGeneric', onConfirm };
+function showConfirm(action, title, bodyHtml, buttonText, danger = true) {
+    pendingAction = action;
     document.getElementById('confirmModalTitle').textContent = title;
     document.getElementById('confirmModalBody').innerHTML = bodyHtml;
-    document.getElementById('confirmActionBtn').textContent = 'Confirm Import';
-    document.getElementById('confirmActionBtn').className = '';
+    document.getElementById('confirmActionBtn').textContent = buttonText;
+    document.getElementById('confirmActionBtn').className = danger ? 'danger' : '';
     document.getElementById('confirmModal').classList.add('active');
+}
+
+function showImportConfirm(title, bodyHtml, onConfirm) {
+    showConfirm({ type: 'importGeneric', onConfirm }, title, bodyHtml, 'Confirm Import', false);
 }
 
 function confirmDeleteAccount() {
     const id = document.getElementById('accountId').value;
     if (!id) return;
-    
-    pendingAction = { type: 'deleteAccount', id };
-    document.getElementById('confirmModalTitle').textContent = 'Delete Account';
-    document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this account? All associated transactions will also be deleted.</p>';
-    document.getElementById('confirmActionBtn').textContent = 'Delete Account';
-    document.getElementById('confirmActionBtn').className = 'danger';
-    document.getElementById('confirmModal').classList.add('active');
+    showConfirm({ type: 'deleteAccount', id }, 'Delete Account',
+        '<p>Are you sure you want to delete this account? All of its transactions, paycheck entries and statements will also be deleted.</p>',
+        'Delete Account');
 }
 
 function confirmDeleteTransaction() {
     const id = document.getElementById('transactionId').value;
     if (!id) return;
-    
-    pendingAction = { type: 'deleteTransaction', id };
-    document.getElementById('confirmModalTitle').textContent = 'Delete Transaction';
-    document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this transaction?</p>';
-    document.getElementById('confirmActionBtn').textContent = 'Delete Transaction';
-    document.getElementById('confirmActionBtn').className = 'danger';
-    document.getElementById('confirmModal').classList.add('active');
+    showConfirm({ type: 'deleteTransaction', id }, 'Delete Transaction',
+        '<p>Are you sure you want to delete this transaction?</p>', 'Delete Transaction');
 }
 
 function closeConfirmModal() {
@@ -292,14 +321,15 @@ function executeConfirmAction() {
         case 'deleteAccount':
             ledgerData.accounts = ledgerData.accounts.filter(a => a.id !== pendingAction.id);
             ledgerData.transactions = ledgerData.transactions.filter(t => t.accountId !== pendingAction.id);
-            ledgerData.paychecks = (ledgerData.paychecks || []).filter(p => p.accountId !== pendingAction.id);
+            ledgerData.paychecks = ledgerData.paychecks.filter(p => p.accountId !== pendingAction.id);
+            ledgerData.statements = ledgerData.statements.filter(s => s.accountId !== pendingAction.id);
             markUnsaved();
             updateUI();
             closeAccountModal();
             showMessage('Account deleted successfully!');
             break;
         case 'deleteTransaction':
-            ledgerData.transactions = ledgerData.transactions.filter(t => t.id !== pendingAction.id);
+            deleteTransactions(new Set([pendingAction.id]));
             markUnsaved();
             updateUI();
             closeTransactionModal();
@@ -307,7 +337,7 @@ function executeConfirmAction() {
             break;
         case 'deleteSelected':
             if (pendingAction.ctx === 'transactions') {
-                ledgerData.transactions = ledgerData.transactions.filter(t => !selectedItems.transactions.has(t.id));
+                deleteTransactions(selectedItems.transactions);
                 selectedItems.transactions.clear();
                 lastSelectedIndex.transactions = -1;
             } else {
@@ -321,7 +351,7 @@ function executeConfirmAction() {
             showMessage('Selected items deleted successfully!');
             break;
         case 'deleteStatement':
-            ledgerData.statements = (ledgerData.statements || []).filter(s => s.id !== pendingAction.id);
+            ledgerData.statements = ledgerData.statements.filter(s => s.id !== pendingAction.id);
             markUnsaved();
             updateUI();
             closeStatementModal();
@@ -407,7 +437,7 @@ function updateSelectionUI(ctx) {
     const count = selectedItems[ctx].size;
 
     if (count > 0) {
-        const collection = ctx === 'transactions' ? ledgerData.transactions : (ledgerData.paychecks || []);
+        const collection = ctx === 'transactions' ? ledgerData.transactions : ledgerData.paychecks;
         const sum = Array.from(selectedItems[ctx]).reduce((total, id) => {
             const item = collection.find(x => x.id === id);
             return total + (item ? Math.abs(item.amount) : 0);
@@ -432,13 +462,9 @@ function updateSelectionUI(ctx) {
 
 function confirmDeleteSelectedItems(ctx) {
     if (selectedItems[ctx].size === 0) return;
-    pendingAction = { type: 'deleteSelected', ctx };
     const label = ctx === 'transactions' ? 'transaction(s)' : 'paycheck entr(ies)';
-    document.getElementById('confirmModalTitle').textContent = 'Delete Selected';
-    document.getElementById('confirmModalBody').innerHTML = `<p>Are you sure you want to delete ${selectedItems[ctx].size} selected ${label}?</p>`;
-    document.getElementById('confirmActionBtn').textContent = 'Delete Selected';
-    document.getElementById('confirmActionBtn').className = 'danger';
-    document.getElementById('confirmModal').classList.add('active');
+    showConfirm({ type: 'deleteSelected', ctx }, 'Delete Selected',
+        `<p>Are you sure you want to delete ${selectedItems[ctx].size} selected ${label}?</p>`, 'Delete Selected');
 }
 
 function sortTable(table, column) {
@@ -450,6 +476,12 @@ function sortTable(table, column) {
         sortState.direction = 'asc';
     }
     updateUI();
+}
+
+function compareValues(a, b) {
+    const dir = sortState.direction === 'asc' ? 1 : -1;
+    if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b) * dir;
+    return (a > b ? 1 : a < b ? -1 : 0) * dir;
 }
 
 function updateUI() {
@@ -467,23 +499,34 @@ function updateFileName() {
     document.getElementById('fileName').textContent = ledgerData.fileName || 'No file loaded';
 }
 
-function getFilteredTransactions() {
-    return selectedMonth === null ? ledgerData.transactions : ledgerData.transactions.filter(t => t.month === selectedMonth);
+function getMonthTransactions() {
+    return ledgerData.transactions.filter(t => t.month === selectedMonth);
 }
 
-function getYTDTransactions() {
-    return selectedMonth === null ? ledgerData.transactions : ledgerData.transactions.filter(t => t.month <= selectedMonth);
+// Marks a tab as incomplete and lists what's missing in its tooltip.
+function updateTabIncompleteIndicators() {
+    const status = Ledger.monthStatus(ledgerData, selectedMonth);
+    ['statements', 'paychecks', 'transactions', 'envelopes'].forEach(tab => {
+        const btn = document.querySelector(`.tab[data-tab="${tab}"]`);
+        const issues = status[tab];
+        btn.classList.toggle('tab-incomplete', issues.length > 0);
+        btn.title = issues.length ? `${MONTH_NAMES[selectedMonth - 1]} still needs:\n• ${issues.join('\n• ')}` : '';
+    });
 }
 
+function accountOptions(placeholder) {
+    return `<option value="">${placeholder}</option>` +
+        ledgerData.accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+}
 
 function populateAccountSelects() {
-    document.getElementById('transactionAccount').innerHTML = '<option value="">Select account...</option>' + ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+    document.getElementById('transactionAccount').innerHTML = accountOptions('Select account...');
 }
 
 function populateTransferSelects() {
-    const opts = ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-    document.getElementById('transferFrom').innerHTML = '<option value="">Select account...</option>' + opts;
-    document.getElementById('transferTo').innerHTML = '<option value="">Select account...</option>' + opts;
+    const opts = accountOptions('Select account...');
+    document.getElementById('transferFrom').innerHTML = opts;
+    document.getElementById('transferTo').innerHTML = opts;
 }
 
 function getMonthName(m) {
@@ -500,12 +543,28 @@ function formatDate(d) {
     return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// Safe for element content and quoted attribute values.
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// A value passed as a JS argument inside an inline handler attribute,
+// e.g. onclick="openEnvelopeModal(${jsArg(name)})". Handles quotes in names.
+function jsArg(value) {
+    return escapeHtml(JSON.stringify(value));
+}
+
+// Envelope colors end up in inline styles, so only allow #rrggbb.
+function safeColor(color) {
+    return /^#[0-9a-f]{6}$/i.test(color || '') ? color : Ledger.DEFAULT_COLOR;
+}
+
+function envelopeTag(name) {
+    const color = safeColor(ledgerData.envelopes[name] && ledgerData.envelopes[name].color);
+    return `<span class="envelope-tag" style="background-color:${color}20;color:${color};">${escapeHtml(name)}</span>`;
+}
 
 document.querySelectorAll('.modal').forEach(m => {
     m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('active'); });

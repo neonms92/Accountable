@@ -1,3 +1,5 @@
+// ─── Accounts ────────────────────────────────────────────────────────────────
+
 function openAccountModal(accountId = null) {
     if (accountId) {
         const account = ledgerData.accounts.find(a => a.id === accountId);
@@ -26,9 +28,12 @@ function closeAccountModal() {
 function saveAccount() {
     const id = document.getElementById('accountId').value;
     const name = document.getElementById('accountName').value.trim();
-    const balance = parseFloat(document.getElementById('accountBalance').value);
-    
+    const balance = parseFloat(document.getElementById('accountBalance').value) || 0;
+
     if (!name) return showMessage('Please enter an account name', 'error');
+    if (ledgerData.accounts.some(a => a.name === name && a.id !== id)) {
+        return showMessage('An account with this name already exists', 'error');
+    }
 
     if (id) {
         const account = ledgerData.accounts.find(a => a.id === id);
@@ -37,7 +42,7 @@ function saveAccount() {
             account.initialBalance = balance;
         }
     } else {
-        ledgerData.accounts.push({ id: Date.now().toString(), name, initialBalance: balance });
+        ledgerData.accounts.push({ id: Ledger.newId(), name, initialBalance: balance });
     }
 
     markUnsaved();
@@ -46,26 +51,14 @@ function saveAccount() {
     showMessage(id ? 'Account updated successfully!' : 'Account added successfully!');
 }
 
-
-function calculateAccountBalances(transactions) {
-    const balances = {};
-    ledgerData.accounts.forEach(a => balances[a.id] = a.initialBalance || 0);
-    // Add all transactions (includes paycheck-managed deduction transactions)
-    transactions.forEach(t => { if (balances[t.accountId] !== undefined) balances[t.accountId] += t.amount; });
-    // Add all paycheck entries with absolute amount
-    // Scope: match the same month filter used by the caller's transaction list
-    const txMonths = new Set(transactions.map(t => t.month));
-    const allMonths = selectedMonth === null;
-    (ledgerData.paychecks || []).forEach(p => {
-        if (balances[p.accountId] !== undefined) {
-            if (allMonths || txMonths.has(p.month)) {
-                balances[p.accountId] += Math.abs(p.amount);
-            }
+// Creates accounts for imported names that don't exist yet.
+function ensureAccounts(names) {
+    names.forEach(name => {
+        if (!ledgerData.accounts.some(a => a.name === name)) {
+            ledgerData.accounts.push({ id: Ledger.newId(), name, initialBalance: 0 });
         }
     });
-    return balances;
 }
-
 
 function updateAccountsTable() {
     const tbody = document.getElementById('accountsBody');
@@ -74,37 +67,22 @@ function updateAccountsTable() {
         return;
     }
 
-    const bal = calculateAccountBalances(getYTDTransactions());
-    // Deposits = sum of ABS(paycheck entries) per account for the period
-    // Withdrawals = sum of negative transaction amounts (ABS) per account for the period
-    const paychecks = ledgerData.paychecks || [];
-    const filtTrans = getFilteredTransactions();
-
-    let accounts = ledgerData.accounts.map(a => {
-        const filtPaychecks = selectedMonth
-            ? paychecks.filter(p => p.accountId === a.id && p.month === selectedMonth)
-            : paychecks.filter(p => p.accountId === a.id);
-        const deposits = filtPaychecks.reduce((s, p) => s + Math.abs(p.amount), 0);
-        const withdrawals = filtTrans
-            .filter(t => t.accountId === a.id && t.amount < 0)
-            .reduce((s, t) => s + Math.abs(t.amount), 0);
-        return { ...a, balance: bal[a.id] || 0, deposits, withdrawals };
-    });
+    // Deposits and withdrawals are this month's activity as the bank sees it;
+    // the balance is as of the end of the month.
+    const bal = Ledger.accountBalances(ledgerData, selectedMonth);
+    let accounts = ledgerData.accounts.map(a => ({
+        ...a,
+        ...Ledger.accountActivity(ledgerData, a.id, selectedMonth),
+        balance: bal[a.id] || 0
+    }));
 
     if (sortState.table === 'accounts') {
-        accounts.sort((a, b) => {
-            let valA, valB;
-            if (sortState.column === 'name') { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
-            else if (sortState.column === 'deposits') { valA = a.deposits; valB = b.deposits; }
-            else if (sortState.column === 'withdrawals') { valA = a.withdrawals; valB = b.withdrawals; }
-            else { valA = a.balance; valB = b.balance; }
-            if (typeof valA === 'string') return sortState.direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-            return sortState.direction === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-        });
+        const key = { name: a => a.name.toLowerCase(), deposits: a => a.deposits, withdrawals: a => a.withdrawals }[sortState.column] || (a => a.balance);
+        accounts.sort((a, b) => compareValues(key(a), key(b)));
     }
 
     tbody.innerHTML = accounts.map(a =>
-        `<tr onclick="openAccountModal('${a.id}')">
+        `<tr onclick="openAccountModal(${jsArg(a.id)})">
             <td>${escapeHtml(a.name)}</td>
             <td class="amount positive">${formatCurrency(a.deposits)}</td>
             <td class="amount ${a.withdrawals > 0 ? 'negative' : ''}">${a.withdrawals > 0 ? '-' : ''}${formatCurrency(a.withdrawals)}</td>

@@ -1,0 +1,9 @@
+{
+  "name": "accountable",
+  "private": true,
+  "description": "Personal envelope-budgeting ledger that runs in the browser",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test"
+  }
+}

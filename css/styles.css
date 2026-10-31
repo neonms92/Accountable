@@ -181,6 +181,15 @@ button.danger:hover {
     margin: 0;
 }
 
+.month-selector .year-input {
+    width: 7rem;
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--color-line-heavy);
+    background: var(--color-paper);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+}
+
 .month-selector select {
     min-width: 200px;
     padding: 0.625rem 1rem;

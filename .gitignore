@@ -1,0 +1,5 @@
+# Ledger data is personal and lives in Google Drive or local files, never in this repo.
+*.json
+!package.json
+*.csv
+node_modules/

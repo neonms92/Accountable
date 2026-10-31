@@ -1,89 +1,29 @@
 // ─── Statements ──────────────────────────────────────────────────────────────
 
-function getStatementKey(accountId, month) {
-    return `${accountId}::${month}`;
-}
-
-function isStatementsComplete(month) {
-    if (!month) return true;
-    const accountIds = ledgerData.accounts.map(a => a.id);
-    if (accountIds.length === 0) return true;
-    return accountIds.every(id => {
-        return (ledgerData.statements || []).some(s => s.accountId === id && s.month === month);
-    });
-}
-
-function updateTabIncompleteIndicators() {
-    // Statements: incomplete when a month is selected and not all accounts have a statement
-    const statementsBtn = document.querySelector('.tab[onclick="switchTab(\'statements\')"]');
-    if (statementsBtn) {
-        const incomplete = selectedMonth && ledgerData.accounts.length > 0 && !isStatementsComplete(selectedMonth);
-        statementsBtn.classList.toggle('tab-incomplete', !!incomplete);
-    }
-
-    // Envelopes: incomplete when any envelope has a negative total in the current view
-    const envelopesBtn = document.querySelector('.tab[onclick="switchTab(\'envelopes\')"]');
-    if (envelopesBtn) {
-        const envNames = Object.keys(ledgerData.envelopes || {}).filter(n => n !== 'Transfer');
-        const checkMonth = selectedMonth;
-        const anyNegative = envNames.some(name => {
-            const total = calculateEnvelopeTotal(name, checkMonth === null ? 12 : checkMonth);
-            return total < -0.005;
-        });
-        envelopesBtn.classList.toggle('tab-incomplete', envNames.length > 0 && anyNegative);
-    }
-
-    // Paychecks: incomplete when for any account, net positive != gross positive - total negatives
-    const paychecksBtn = document.querySelector('.tab[onclick="switchTab(\'paychecks\')"]');
-    if (paychecksBtn) {
-        paychecksBtn.classList.toggle('tab-incomplete', !isPaychecksComplete());
-    }
-}
-
-function isPaychecksComplete() {
-    const paychecks = ledgerData.paychecks || [];
-    if (paychecks.length === 0) return true;
-    // Check per account (and month if selected)
-    const relevantPaychecks = selectedMonth
-        ? paychecks.filter(p => p.month === selectedMonth)
-        : paychecks;
-    if (relevantPaychecks.length === 0) return true;
-
-    const positiveEntries = relevantPaychecks.filter(p => p.amount > 0);
-    const negativeEntries = relevantPaychecks.filter(p => p.amount < 0);
-    if (positiveEntries.length === 0) return true; // no income entries, nothing to validate
-    const totalNet = positiveEntries.reduce((s, p) => s + p.amount, 0);
-    const totalGross = positiveEntries.reduce((s, p) => s + (p.gross || p.amount), 0);
-    const totalDeductions = negativeEntries.reduce((s, p) => s + Math.abs(p.amount), 0);
-    const expectedNet = totalGross - totalDeductions;
-    return Math.abs(totalNet - expectedNet) < 0.005;
-}
-
 function updateStatementsTab() {
     const tbody = document.getElementById('statementsBody');
-    if (!tbody) return;
-
-    const stmts = selectedMonth
-        ? (ledgerData.statements || []).filter(s => s.month === selectedMonth)
-        : (ledgerData.statements || []);
+    const stmts = ledgerData.statements.filter(s => s.month === selectedMonth);
 
     if (stmts.length === 0) {
-        const msg = selectedMonth ? 'No statements for this month' : 'No statements yet';
-        const desc = selectedMonth ? 'Add a statement for each account to mark the month complete' : 'Add your first statement to start tracking';
-        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🧾</div><div class="empty-state-title">${msg}</div><p>${desc}</p></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🧾</div><div class="empty-state-title">No statements for this month</div><p>Add a statement for each account to mark the month complete</p></div></td></tr>`;
         return;
     }
 
     tbody.innerHTML = stmts.map(s => {
         const account = ledgerData.accounts.find(a => a.id === s.accountId);
         const accountName = account ? escapeHtml(account.name) : 'Unknown';
-        const expected = s.startBalance + s.deposits - s.withdrawals;
-        const diff = Math.abs(expected - s.endBalance);
-        const ok = diff < 0.005;
-        const statusHtml = ok
-            ? `<span class="stmt-status ok" title="Balances check out">✓</span>`
-            : `<span class="stmt-status warn" title="Expected ending balance: ${formatCurrency(expected)} (diff: ${formatCurrency(diff)})">!</span>`;
-        return `<tr onclick="openStatementModal('${s.id}')">
+        // Two checks: the statement adds up on its own, and the ledger's activity
+        // for the account matches the statement's deposit and withdrawal totals.
+        const problems = [];
+        const check = Ledger.statementCheck(s);
+        if (!check.ok) problems.push(`Expected ending balance: ${formatCurrency(check.expected)} (diff: ${formatCurrency(check.diff)})`);
+        const act = Ledger.accountActivity(ledgerData, s.accountId, s.month);
+        if (!Ledger.nearlyEqual(act.deposits, s.deposits)) problems.push(`Ledger deposits: ${formatCurrency(act.deposits)}`);
+        if (!Ledger.nearlyEqual(act.withdrawals, s.withdrawals)) problems.push(`Ledger withdrawals: ${formatCurrency(act.withdrawals)}`);
+        const statusHtml = problems.length === 0
+            ? `<span class="stmt-status ok" title="Balances check out and match the ledger">✓</span>`
+            : `<span class="stmt-status warn" title="${escapeHtml(problems.join('\n'))}">!</span>`;
+        return `<tr onclick="openStatementModal(${jsArg(s.id)})">
             <td>${accountName}</td>
             <td class="amount">${formatCurrency(s.startBalance)}</td>
             <td class="amount">${formatCurrency(s.endBalance)}</td>
@@ -99,12 +39,10 @@ function openStatementModal(statementId = null) {
     if (ledgerData.accounts.length === 0) return showMessage('Please add an account first', 'error');
 
     // Populate account select
-    document.getElementById('statementAccount').innerHTML =
-        '<option value="">Select account...</option>' +
-        ledgerData.accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+    document.getElementById('statementAccount').innerHTML = accountOptions('Select account...');
 
     if (statementId) {
-        const s = (ledgerData.statements || []).find(x => x.id === statementId);
+        const s = ledgerData.statements.find(x => x.id === statementId);
         if (s) {
             document.getElementById('statementModalTitle').textContent = 'Edit Statement';
             document.getElementById('statementId').value = s.id;
@@ -125,16 +63,11 @@ function openStatementModal(statementId = null) {
         document.getElementById('statementForm').reset();
         document.getElementById('deleteStatementBtn').style.display = 'none';
         document.getElementById('statementSanityCheck').style.display = 'none';
-        if (selectedMonth) document.getElementById('statementMonth').value = selectedMonth;
+        document.getElementById('statementMonth').value = selectedMonth;
     }
 
     document.getElementById('statementModal').classList.add('active');
     setTimeout(() => document.getElementById('statementAccount').focus(), 100);
-
-    // Live sanity check
-    ['statementStartBalance','statementEndBalance','statementDeposits','statementWithdrawals'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateStatementSanityCheck);
-    });
 }
 
 function updateStatementSanityCheck() {
@@ -175,8 +108,6 @@ function saveStatement() {
         return showMessage('Please fill in all required fields', 'error');
     }
 
-    if (!ledgerData.statements) ledgerData.statements = [];
-
     // Check for duplicate (same account + month), excluding self
     const duplicate = ledgerData.statements.find(s => s.accountId === accountId && s.month === month && s.id !== id);
     if (duplicate) return showMessage('A statement already exists for this account and month', 'error');
@@ -185,7 +116,7 @@ function saveStatement() {
         const s = ledgerData.statements.find(x => x.id === id);
         if (s) Object.assign(s, { accountId, month, startDate, endDate, startBalance, endBalance, deposits, withdrawals });
     } else {
-        ledgerData.statements.push({ id: Date.now().toString(), accountId, month, startDate, endDate, startBalance, endBalance, deposits, withdrawals });
+        ledgerData.statements.push({ id: Ledger.newId(), accountId, month, startDate, endDate, startBalance, endBalance, deposits, withdrawals });
     }
 
     markUnsaved();
@@ -197,10 +128,6 @@ function saveStatement() {
 function confirmDeleteStatement() {
     const id = document.getElementById('statementId').value;
     if (!id) return;
-    pendingAction = { type: 'deleteStatement', id };
-    document.getElementById('confirmModalTitle').textContent = 'Delete Statement';
-    document.getElementById('confirmModalBody').innerHTML = '<p>Are you sure you want to delete this statement?</p>';
-    document.getElementById('confirmActionBtn').textContent = 'Delete Statement';
-    document.getElementById('confirmActionBtn').className = 'danger';
-    document.getElementById('confirmModal').classList.add('active');
+    showConfirm({ type: 'deleteStatement', id }, 'Delete Statement',
+        '<p>Are you sure you want to delete this statement?</p>', 'Delete Statement');
 }
