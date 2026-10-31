@@ -180,3 +180,11 @@ test('parseCSV rejects files without data rows', () => {
 test('defaultDate uses the ledger year', () => {
     assert.equal(Ledger.defaultDate(2025, 3), '2025-03-01');
 });
+
+test('a refund puts money back into its envelope', () => {
+    const d = sample();
+    d.transactions.push({ id: 'r1', date: '2026-02-10', month: 2, accountId: 'cc', amount: 30, description: 'Store refund', envelope: 'Groceries' });
+    assert.equal(Ledger.envelopeWithdrawals(d, 'Groceries', 2), 470);
+    assert.equal(Ledger.necessaryExpenses(d, 2), 470);
+    assert.equal(Ledger.envelopeBalance(d, 'Groceries', 2), 400 - 150 + 400 - 470);
+});

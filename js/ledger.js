@@ -186,8 +186,10 @@
         return 0;
     }
 
+    // Net spending from an envelope in a month. A refund (a positive transaction
+    // with the envelope set) puts money back, so it reduces the total.
     function envelopeWithdrawals(data, name, month) {
-        return sum(data.transactions.filter(t => t.month === month && t.envelope === name && t.amount < 0), t => -t.amount);
+        return sum(data.transactions.filter(t => t.month === month && t.envelope === name), t => -t.amount);
     }
 
     // Running balance: the balance carried in from last year, plus funding minus
@@ -211,7 +213,7 @@
 
     function necessaryExpenses(data, month) {
         const necessary = new Set(envelopeNames(data).filter(n => data.envelopes[n].necessary));
-        return sum(data.transactions.filter(t => t.month === month && t.amount < 0 && necessary.has(t.envelope)), t => -t.amount);
+        return sum(data.transactions.filter(t => t.month === month && necessary.has(t.envelope)), t => -t.amount);
     }
 
     // ── Statements ───────────────────────────────────────────────────────────

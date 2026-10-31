@@ -101,6 +101,7 @@ This is an object keyed by envelope name:
 - `funding` holds the amount added to the envelope in each month. A month with no entry repeats the most recent earlier amount. In the example above, months 1–5 are funded with 600 and months 6–12 with 650.
 - `openingBalance` is what the envelope held at the end of the previous year's file, and it defaults to 0. Starting a new year this way means January funding is only that month's allocation.
 - An envelope's balance is its opening balance plus all funding so far, minus all withdrawals so far, through the selected month.
+- Withdrawals are net: a refund (a positive transaction with the envelope set) puts its amount back into the envelope. The same goes for "Necessary Expenses".
 - `necessary` envelopes count toward the "Necessary Expenses" figure on the Summary tab.
 - `"Transfer"` is reserved and isn't a budget envelope.
 
