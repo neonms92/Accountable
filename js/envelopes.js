@@ -56,6 +56,7 @@ function openEnvelopeModal(name = null) {
     document.getElementById('envelopeFundingMonthLabel').textContent = `for ${MONTH_NAMES[selectedMonth - 1]}`;
     document.getElementById('envelopeFunding').value = explicit !== undefined ? explicit : '';
     document.getElementById('envelopeNecessary').checked = !!(env && env.necessary);
+    document.getElementById('envelopeOpeningBalance').value = env && env.openingBalance ? env.openingBalance : '';
 
     selectEnvelopeModalColor(color);
     document.querySelectorAll('#envelopeModal .color-preset').forEach(btn => {
@@ -91,7 +92,7 @@ function saveEnvelope() {
     if (name !== oldName && ledgerData.envelopes[name]) return showMessage('An envelope with this name already exists', 'error');
 
     if (!isEdit) {
-        ledgerData.envelopes[name] = { color: envelopeModalColor, funding: {}, necessary: false };
+        ledgerData.envelopes[name] = { color: envelopeModalColor, funding: {}, necessary: false, openingBalance: 0 };
     } else if (name !== oldName) {
         if (!ledgerData.envelopes[oldName]) return;
         renameEnvelope(oldName, name);
@@ -100,6 +101,7 @@ function saveEnvelope() {
     const env = ledgerData.envelopes[name];
     env.color = envelopeModalColor;
     env.necessary = document.getElementById('envelopeNecessary').checked;
+    env.openingBalance = parseFloat(document.getElementById('envelopeOpeningBalance').value) || 0;
 
     const rawFunding = document.getElementById('envelopeFunding').value;
     if (rawFunding === '') {
@@ -126,6 +128,6 @@ function confirmDeleteEnvelope() {
 // Creates envelopes for imported names that don't exist yet.
 function ensureEnvelopes(names) {
     names.forEach(name => {
-        if (name && !ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: Ledger.DEFAULT_COLOR, funding: {}, necessary: false };
+        if (name && !ledgerData.envelopes[name]) ledgerData.envelopes[name] = { color: Ledger.DEFAULT_COLOR, funding: {}, necessary: false, openingBalance: 0 };
     });
 }

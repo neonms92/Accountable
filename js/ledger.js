@@ -94,6 +94,7 @@
         Object.values(data.envelopes).forEach(env => {
             if (!env.funding || typeof env.funding !== 'object') env.funding = {};
             if (env.necessary === undefined) env.necessary = false;
+            env.openingBalance = toNumber(env.openingBalance);
             if (!env.color) env.color = DEFAULT_COLOR;
         });
 
@@ -189,9 +190,11 @@
         return sum(data.transactions.filter(t => t.month === month && t.envelope === name && t.amount < 0), t => -t.amount);
     }
 
-    // Running balance: total funding minus withdrawals for months 1..throughMonth.
+    // Running balance: the balance carried in from last year, plus funding minus
+    // withdrawals for months 1..throughMonth.
     function envelopeBalance(data, name, throughMonth) {
-        let total = 0;
+        const env = data.envelopes[name];
+        let total = env ? env.openingBalance || 0 : 0;
         for (let m = 1; m <= throughMonth; m++) {
             total += envelopeFunding(data, name, m) - envelopeWithdrawals(data, name, m);
         }

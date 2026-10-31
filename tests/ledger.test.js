@@ -100,6 +100,20 @@ test('envelope balance is cumulative funding minus withdrawals', () => {
     assert.equal(Ledger.envelopeBalance(d, 'Insurance', 1), 0);
 });
 
+test('envelope opening balance carries last year into every month', () => {
+    const d = sample();
+    d.envelopes.Groceries.openingBalance = 75;
+    assert.equal(Ledger.envelopeBalance(d, 'Groceries', 1), 325);
+    assert.equal(Ledger.envelopeBalance(d, 'Groceries', 2), 225);
+    assert.equal(Ledger.budgetGap(d, 1), 2145);
+});
+
+test('migrate defaults envelope opening balance to 0', () => {
+    const d = Ledger.migrate({ envelopes: { A: {}, B: { openingBalance: '12.5' } } });
+    assert.equal(d.envelopes.A.openingBalance, 0);
+    assert.equal(d.envelopes.B.openingBalance, 12.5);
+});
+
 test('Transfer is not a budget envelope', () => {
     assert.deepEqual(Ledger.envelopeNames(sample()).sort(), ['Fun', 'Groceries', 'Insurance']);
 });

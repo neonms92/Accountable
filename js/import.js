@@ -80,7 +80,7 @@ function envelopesFromCSV(header, rows) {
             const m = col.match(/^funding_(\d+)$/);
             if (m && row[col] !== '') funding[parseInt(m[1], 10)] = parseFloat(row[col]) || 0;
         });
-        result[row.name] = { color: row.color, necessary: row.necessary === 'true' || row.necessary === '1', funding };
+        result[row.name] = { color: row.color, necessary: row.necessary === 'true' || row.necessary === '1', openingBalance: row.opening_balance, funding };
     });
     return result;
 }
@@ -212,7 +212,7 @@ function importEnvelopes(envelopesObj, format) {
     const toAdd = [], toUpdate = [];
     Object.entries(envelopesObj).forEach(([name, env]) => {
         if (!name || name === Ledger.TRANSFER_ENVELOPE || !env || typeof env !== 'object') return;
-        const e = { name, color: safeColor(env.color), funding: env.funding || {}, necessary: !!env.necessary };
+        const e = { name, color: safeColor(env.color), funding: env.funding || {}, necessary: !!env.necessary, openingBalance: parseFloat(env.openingBalance) || 0 };
         (ledgerData.envelopes[name] ? toUpdate : toAdd).push(e);
     });
 
@@ -222,11 +222,12 @@ function importEnvelopes(envelopesObj, format) {
     if (!parts.length) return showMessage(`No valid envelope data found in ${format}`, 'error');
 
     showImportConfirm(`Import Envelopes (${format})`, '<p>' + parts.join('<br>') + '</p>', () => {
-        toAdd.forEach(e => { ledgerData.envelopes[e.name] = { color: e.color, funding: { ...e.funding }, necessary: e.necessary }; });
+        toAdd.forEach(e => { ledgerData.envelopes[e.name] = { color: e.color, funding: { ...e.funding }, necessary: e.necessary, openingBalance: e.openingBalance }; });
         toUpdate.forEach(e => {
             const env = ledgerData.envelopes[e.name];
             env.color = e.color;
             env.necessary = e.necessary;
+            env.openingBalance = e.openingBalance;
             Object.assign(env.funding, e.funding);
         });
         markUnsaved(); updateUI();

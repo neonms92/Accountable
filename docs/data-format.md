@@ -94,12 +94,13 @@ This is an object keyed by envelope name:
 
 ```json
 {
-  "Groceries": { "color": "#2D5F3F", "necessary": true, "funding": { "1": 600, "6": 650 } }
+  "Groceries": { "color": "#2D5F3F", "necessary": true, "openingBalance": 120.40, "funding": { "1": 600, "6": 650 } }
 }
 ```
 
 - `funding` holds the amount added to the envelope in each month. A month with no entry repeats the most recent earlier amount. In the example above, months 1–5 are funded with 600 and months 6–12 with 650.
-- An envelope's balance is all funding so far minus all withdrawals so far, through the selected month.
+- `openingBalance` is what the envelope held at the end of the previous year's file, and it defaults to 0. Starting a new year this way means January funding is only that month's allocation.
+- An envelope's balance is its opening balance plus all funding so far, minus all withdrawals so far, through the selected month.
 - `necessary` envelopes count toward the "Necessary Expenses" figure on the Summary tab.
 - `"Transfer"` is reserved and isn't a budget envelope.
 
@@ -125,7 +126,7 @@ Each tab's **Import** button accepts a CSV or JSON file. You can also paste the 
 | Transactions | `date, account, amount, description` | `envelope, month` |
 | Paychecks | `month, account, amount` | `date, gross, tithing_type, envelope` (an envelope is required for deductions) |
 | Statements | `account, month, start_balance, end_balance, deposits, withdrawals` | `start_date, end_date` |
-| Envelopes | `name` | `color, necessary, funding_1` … `funding_12` |
+| Envelopes | `name` | `color, necessary, opening_balance, funding_1` … `funding_12` |
 
 JSON items use the field names from the sections above. In JSON, an account can be given either as `account` (its name) or as `accountId`.
 
